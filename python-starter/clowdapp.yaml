@@ -1,29 +1,36 @@
-# apiVersion: v1
-# kind: Template
-# metadata:
-#   name: starterapp
-# objects:
-apiVersion: cloud.redhat.com/v1alpha1
-kind: ClowdApp
+apiVersion: v1
+kind: Template
 metadata:
   name: starterapp
-spec:
-  # envName: ${ENV_NAME}
-  envName: env-boot
-  kafkaTopics:
-  - topicName: test-topic
-    partitions: 1
-    replicas: 1
-  database:
-    name: dBaseName
-  inMemoryDb: true
-  objectStore:
-    - name
-  deployments:
-    - name: worker-service
-      minReplicas: 1
-      podSpec:
-        image: 127.0.0.1:5000/starterapp:001
+parameters:
+- name: IMAGE_TAG
+- name: IMAGE
+objects:
+- apiVersion: cloud.redhat.com/v1alpha1
+  kind: ClowdApp
+  metadata:
+    name: starterapp
+  spec:
+    envName: env-boot
+    kafkaTopics:
+    - topicName: test-topic
+      partitions: 1
+      replicas: 1
+    database:
+      name: dBaseName
+    inMemoryDb: true
+    objectStore:
+      - name
+    deployments:
+      - name: worker-service
+        minReplicas: 1
+        podSpec:
+          image: ${IMAGE}:${IMAGE_TAG}
+        webServices:
+          public:
+            enabled: true
+          metrics:
+            enabled: true
         # initContainers:
         #   - env:
         #     - name: INIT_CONTAINER
@@ -32,11 +39,21 @@ spec:
         #     args:
         #       - sh
         #       - /opt/app-root/src/deploy/init-container-setup.sh
-        # livenessProbe:
-        #   exec:
-        #     command:
-        #     - touch /tmp/healthy
-        #     - cat
-        #     - /tmp/healthy
-        #   initialDelaySeconds: 5
-        #   periodSeconds: 5
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /livez
+            port: 8000
+            scheme: HTTP
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 60
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /readyz
+            port: 8000
+            scheme: HTTP
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 60
