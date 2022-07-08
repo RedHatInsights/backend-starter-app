@@ -8,7 +8,6 @@ RUN pip install -r /requirements.txt
 
 CMD python /starter_app.py
 
-# EXPOSE 8080
 
 # ENV NODEJS_VERSION=14 \
 #     NODEJS_SCL=rh-nodejs14 \
