@@ -13,7 +13,7 @@ objects:
   spec:
     envName: env-boot
     kafkaTopics:
-    - topicName: test-topic
+    - topicName: example-topic
       partitions: 1
       replicas: 1
     database:
@@ -57,3 +57,21 @@ objects:
           periodSeconds: 30
           successThreshold: 1
           timeoutSeconds: 60
+# ---
+# apiVersion: monitoring.coreos.com/v1
+# kind: ServiceMonitor
+# metadata:
+#   name: ephemeral-namespace-operator
+#   labels:
+#     prometheus: app-sre
+# spec:
+#   endpoints:
+#   - interval: 15s
+#     path: /metrics
+#     port: 9001
+#   namespaceSelector:
+#     matchNames:
+#     - ephemeral-namespace-operator-system
+#   selector:
+#     matchLabels:
+#       operator-name: ephemeral-namespace-operator
