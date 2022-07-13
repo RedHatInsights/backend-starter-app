@@ -1,9 +1,11 @@
 FROM registry.access.redhat.com/ubi8/python-38
 
+# Install net-tools for netstat and ifconfig, which are useful
+USER root
+RUN yum install net-tools -y
+
 ENV TEST_ENV_MESSAGE=""
-
 COPY . /
-
 RUN pip install -r /requirements.txt
 
 CMD python /starter_app.py
