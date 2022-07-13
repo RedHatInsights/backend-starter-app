@@ -59,8 +59,13 @@ def minio_get():
     if not MINIO_ENABLED:
         return "Minio is not enabled"
     objects = list(MINIO_CLIENT.list_objects("testbucket"))
-    print(objects)
-    return "Printed info"
+    return {
+        obj.object_name: {
+            "size": obj.size,
+            "last_modified": obj.last_modified,
+        }
+        for obj in objects
+    }
 
 
 @APP.route('/minio', methods=['POST', 'PUT'])
@@ -105,31 +110,20 @@ def kafka_get():
     print(f"Consumer topics: {consumer_topics}")
     CONSUMER.subscribe(consumer_topics)
     messages = {}
-    start = time.time()
-    # For some reason Kafka will sometimes return 0 messages, so if we consume
-    # a couple times until something shows up, we should get messages
-    # while time.time() < start + 5:
-    # Let's consume upwards of 5000 messages
-    # * Tried timeout as long as 60 seconds, still not working as intended
-    # * But maybe it's just because kafka is weird and groupID overlap and such
-    # ? Possibly reach out to Chris Mitchell per Ben
-    print("Starting loop")
-    while time.time() < start + 2.5:
-        print("\tIn loop")
-        current_messages = CONSUMER.consume(num_messages=5000, timeout=0.25)
-        print(f"\tCurrent Messages: {current_messages}")
-        for message in current_messages:
-            print(f"\t\tMessage: {message}")
-            # message.timestamp() might be useful as well
-            topic, value = message.topic(), message.value().decode('utf-8')
-
-            if topic not in messages:
-                messages[topic] = []
-            messages[topic].append(value)
-        if len(messages) > 0:
-            print(f"Messages: {messages}")
-            break
-    print("Out of loop")
+    # I talked with Chris and got this working, the issue is essentially that
+    # the consumption only occurs while *in* this function, so we need another
+    # way of getting messages, i.e. a thread
+    print("Starting message consumption")
+    current_messages = CONSUMER.consume(num_messages=500, timeout=10)
+    print(f"Current Messages: {current_messages}")
+    for message in current_messages:
+        print(f"\t\tMessage: {message}")
+        # message.timestamp() might be useful as well
+        topic, value = message.topic(), message.value().decode('utf-8')
+        if topic not in messages:
+            messages[topic] = []
+        messages[topic].append(value)
+    print("Out of consumption loop")
     CONSUMER.unsubscribe()
     CONSUMED_MESSAGES.inc()
     UNCONSUMED_MESSAGES.dec()
@@ -159,12 +153,11 @@ def kafka_put():
 
 # 0. dummy API for liveness and readiness probes ✅ (apparently clowder built-in)
 # 1. Get simple API to send/receive messages through kafka ✅
+#  - At some point, I need to convert from Flask to Django 
 # 2. get examples for each clowder provider:
-#        Kafka - Finished, sort of ✅
-#              - Has a bug 🐛 (possibly in Flask?) The issue is that sometimes
-#                the GET method returns {} instead of the messages we want
+#        Kafka - In progress 🔄
 #        Web - Finished ✅
-#        Minio - In progress 🔄
+#        Minio - In progress ✅
 #        In-memory db - In progress 🔄
 #        Postgres - In progress 🔄
 #        Metrics - In progress 🔄
