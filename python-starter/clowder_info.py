@@ -20,6 +20,7 @@ else:
 KAFKA_SERVER = f"{KAFKA_HOST}:{KAFKA_PORT}"
 
 # Database
+# TODO: Break out db into individual vars, in separate file as helpers
 if LoadedConfig.database is None or not LoadedConfig.database.rdsCa:
     db_options = {"OPTIONS": {}}
 else:
@@ -84,6 +85,7 @@ if LoadedConfig.objectStore is not None:
 METRICS_PORT = LoadedConfig.metricsPort
 
 
+# TODO: Break info prints out into separate functions
 def print_info():
     print("""\n\n
 ##############################################################################
@@ -146,7 +148,7 @@ def print_info():
     else:
         print("\t🚫 LoadedConfig.objectStore is None")
 
-    print("\n📈\Metrics:")
+    print("\n📈\tMetrics:")
     print(f"\t▪ Metrics port: {METRICS_PORT}")
 
     print("\n🐷\tThat's all, folks!")
