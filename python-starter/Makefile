@@ -2,6 +2,7 @@
 
 PERSONAL_SECRET ?= ../../../rh-ee-jtoftum-secret.yml
 QUAY_SECRET ?= ../../../quay-cloudservices-pull.yml
+KUBE_SETUP_LOCATION ?= ../kube_setup.sh
 # IMAGE_TAG ?= $(shell git rev-parse --short=7 HEAD)
 IMAGE_TAG := $(shell cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 7 | head -n 1)
 HOST ?= 127.0.0.1
@@ -27,7 +28,10 @@ minikube_start:
 	@echo "Starting minikube"
 	minikube start --cpus 4 --disk-size 36GB --memory 16GB --driver=kvm2 --addons registry --addons ingress
 	@echo "Curling clowder prereqs"
-	curl https://raw.githubusercontent.com/RedHatInsights/clowder/master/build/kube_setup.sh | bash
+	# For some reason I have to make this twice, once with the `curl` line and once with the `KUBE_SETUP_LOCATION` line??
+	# curl https://raw.githubusercontent.com/RedHatInsights/clowder/master/build/kube_setup.sh | bash
+	# modified kube_setup.sh which checks whether subscriptions.operators.coreos.com.yaml exists
+	KUBE_SETUP_LOCATION | bash
 	@echo "Applying clowder"
 	minikube kubectl -- apply -f https://github.com/RedHatInsights/clowder/releases/download/v0.33.0/clowder-manifest-v0.33.0.yaml --validate=false
 
