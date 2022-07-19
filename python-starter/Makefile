@@ -33,14 +33,12 @@ minikube_start:
 	# modified kube_setup.sh which checks whether subscriptions.operators.coreos.com.yaml exists
 	KUBE_SETUP_LOCATION | bash
 	@echo "Applying clowder"
-	minikube kubectl -- apply -f https://github.com/RedHatInsights/clowder/releases/download/v0.33.0/clowder-manifest-v0.33.0.yaml --validate=false
+	minikube kubectl -- apply -f https://github.com/RedHatInsights/clowder/releases/download/v0.42.0/clowder-manifest-v0.42.0.yaml --validate=false
 
 
 build_container:
 	# Container build
 	@echo "Building container"
-	podman build -t starterapp .
-
 	# Minikube needs to know where to get the image from so push locally
 	podman build -t $(IMAGE):$(IMAGE_TAG) .
 
@@ -52,7 +50,7 @@ push_pod:
 
 namespace_prep:
 	oc create namespace boot --dry-run=client -o yaml | oc apply -f -
-	oc apply -f $(PERSONAL_SECRET) --namespace=boot
+	# oc apply -f $(PERSONAL_SECRET) --namespace=boot
 	oc apply -f $(QUAY_SECRET) --namespace=boot
 	bonfire deploy-env --namespace=boot
 

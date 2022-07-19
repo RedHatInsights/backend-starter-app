@@ -5,8 +5,9 @@ USER root
 RUN yum install net-tools -y
 
 ENV TEST_ENV_MESSAGE=""
-COPY . /
+COPY requirements.txt /
 RUN pip install -r /requirements.txt
+COPY . /
 
 CMD python /starter_app.py
 

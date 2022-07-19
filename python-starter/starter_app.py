@@ -1,6 +1,7 @@
 import os
 import random
 import threading
+import time
 from datetime import datetime
 
 import psycopg2
@@ -22,10 +23,7 @@ if LoadedConfig is None:
 
 APP = Flask(__name__)
 KAFKA_SERVER = clowder_info.KAFKA_SERVER
-CONSUMER = Consumer({
-    "bootstrap.servers": KAFKA_SERVER,
-    "group.id": __name__
-})
+CONSUMER = Consumer({"bootstrap.servers": KAFKA_SERVER, "group.id": __name__})
 
 # This just gets the first key it can and uses that
 PRODUCER_TOPIC = next(iter(KafkaTopics))
@@ -249,15 +247,14 @@ def kafka_put():
 # - Get example of redis
 if __name__ == '__main__':
     # We need to have a thread for consume_messages() to run in the background
+
     CONSUMER_THREAD = threading.Thread(target=consume_messages)
     CONSUMER_THREAD.start()
-    # ? OSError: [Errno 98] Address already in use
-    # ? ONLY shows up when APP.run() is also called, despite the fact that the
-    # ? call is done *after* the start_prometheus() call???
-    # start_prometheus()
+
+    start_prometheus()
     PORT = LoadedConfig.publicPort
     print(f"public port: {PORT}")
-    APP.run(host='0.0.0.0', port=PORT, debug=True, threaded=True)
+    APP.run(host='0.0.0.0', port=PORT, debug=False, threaded=True)
 
 # Build stuff
 # Push to quay
