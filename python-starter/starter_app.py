@@ -4,65 +4,45 @@ import threading
 import time
 from datetime import datetime
 
-import psycopg2
-import redis
 from app_common_python import KafkaTopics, LoadedConfig
-from confluent_kafka import Consumer, Producer
 from flask import Flask, make_response, request
-from minio import Minio
-from prometheus_client import Counter, Gauge, start_http_server
+from prometheus_client import Counter, Gauge
 
-import clowder_info
+import starter_helper
 
-clowder_info.print_info()
+scaffolding = starter_helper.StarterHelper()
+scaffolding.print_all_info()
 
-print(f"\n\n🚀\tStarted at: {datetime.now()}\n")
-
-if LoadedConfig is None:
-    raise ValueError("LoadedConfig is None, impossible to continue")
+print(f"\n\n🚀\tStarter App started at: {datetime.now()}\n")
 
 APP = Flask(__name__)
-KAFKA_SERVER = clowder_info.KAFKA_SERVER
-CONSUMER = Consumer({"bootstrap.servers": KAFKA_SERVER, "group.id": __name__})
 
-# This just gets the first key it can and uses that
-PRODUCER_TOPIC = next(iter(KafkaTopics))
 UNCONSUMED_MESSAGES = Gauge("unconsumed_messages",
                             "Number of unconsumed messages")
 CONSUMED_MESSAGES = Counter("consumed_messages", "Number of consumed messages")
 PRODUCED_MESSAGES = Counter("produced_messages", "Number of produced messages")
 HEALTH_CALLS = Counter("health_calls", "Number of health calls")
 
-if LoadedConfig.objectStore is not None:
-    MINIO_CLIENT = Minio(clowder_info.MINIO_SERVER,
-                         access_key=clowder_info.MINIO_ACCESSKEY,
-                         secret_key=clowder_info.MINIO_SECRETKEY,
-                         secure=False)
-    MINIO_ENABLED = True
-    if not MINIO_CLIENT.bucket_exists("testbucket"):
-        MINIO_CLIENT.make_bucket("testbucket")
-else:
-    MINIO_ENABLED = False
 
-REDIS_CONN = redis.Redis(host=clowder_info.REDIS_HOST,
-                         port=clowder_info.REDIS_PORT)
-
-# TODO: Add checking to this
-# pg_options = clowder_info.db_options["OPTIONS"]
-# POSTGRES_CONN = psycopg2.connect(
-#     host=pg_options['hostname'],
-#     port=pg_options['port'],
-#     database="suppliers",
-#     user="postgres",
-#     password="Abcd1234"
-#     )
+@APP.route('/postgres', methods=['GET'])
+def postgres_get():
+    print("In postgres_get()")
+    cursor = scaffolding.database_conn().cursor()
+    SQL = "select * from example;"
+    result = cursor.execute(SQL)
+    print(result)
+    return result
 
 
-def start_prometheus():
-    # if Clowder is enabled then prometheus is always set
-    print(f"Metrics port: {clowder_info.METRICS_PORT}")
-    start_http_server(port=clowder_info.METRICS_PORT)
-    print("Prometheus server started")
+@APP.route('/postgres', methods=['POST', 'PUT'])
+def postgres_put():
+    print("In postgres_put()")
+    # https://www.psycopg.org/docs/usage.html#the-problem-with-the-query-parameters
+    cursor = scaffolding.database_conn().cursor()
+    SQL = "insert into example (message) values (%s);"
+    message = (request.args.get("message"), )
+    cursor.execute(SQL, message)
+    return f"Inserted message {message} into database"
 
 
 # Generate a basic file to be used as a test file, and get them all
@@ -71,10 +51,11 @@ def minio_get():
     """
     Handles GET requests to the /minio endpoint. Returns object data from Minio.
     """
-    print("In minio_get")
-    if not MINIO_ENABLED:
+    print("In minio_get()")
+    if not scaffolding.object_store_enabled:
         return "Minio is not enabled"
-    objects = list(MINIO_CLIENT.list_objects("testbucket"))
+    minio_client = scaffolding.object_store_conn()
+    objects = list(minio_client.list_objects("testbucket"))
     return {
         obj.object_name: {
             "size": obj.size,
@@ -91,19 +72,22 @@ def minio_put():
     to an example bucket called `testbucket` with the file name as the timestamp
     and the file contents as a string of random bits.
     """
-    print("In minio_put")
-    if not MINIO_ENABLED:
+    print("In minio_put()")
+    if not scaffolding.object_store_enabled:
         return "Minio is not enabled"
+    minio_client = scaffolding.object_store_conn()
     # Write a file containing a random string locally as an example for Minio
     current_time = datetime.now()
     with open(f"{current_time}.txt", "w") as f:
         f.write(str(random.getrandbits(1024)))
+    if not minio_client.bucket_exists("testbucket"):
+        minio_client.make_bucket("testbucket")
     # Upload the file to Minio
-    MINIO_CLIENT.fput_object("testbucket", f"{current_time}.txt",
+    minio_client.fput_object("testbucket", f"{current_time}.txt",
                              f"{current_time}.txt")
     # Delete the temp file
     os.remove(f"{current_time}.txt")
-    return "OK"
+    return f"Inserted {current_time}.txt into Minio"
 
 
 @APP.route('/redis', methods=['GET'])
@@ -115,10 +99,12 @@ def redis_get():
     `key` is a required input to the request.
     """
     print("In redis_get()")
+    if not scaffolding.in_memory_db_enabled:
+        return "Redis is not enabled"
     key = request.args.get("key")
     if key is None:
         return make_response("No key specified", 400)
-    result = REDIS_CONN.get(key)
+    result = scaffolding.in_memory_db_conn().get(key)
     print(f"Redis result: {result}")
     if result is None:
         return make_response("Key not found in database", 404)
@@ -135,16 +121,17 @@ def redis_put():
     `key` and `value` are required inputs to the request.
     """
     print("In redis_put()")
+
     key = request.args.get("key")
     if key is None:
         return make_response("No key provided", 400)
     value = request.args.get("value")
     if value is None:
         return make_response("No value provided", 400)
-    result = REDIS_CONN.set(key, value)
+    result = scaffolding.in_memory_db_conn().set(key, value)
     if not result:
         return make_response("Failed to set properly", 500)
-    return "OK"
+    return f"Set {key} to {value}"
 
 
 @APP.route('/livez', methods=['GET', 'PUT', 'POST'])
@@ -173,10 +160,11 @@ MESSAGES = {}
 # That would be much safer than this temp approach
 def consume_messages():
     global MESSAGES
-    CONSUMER.subscribe(list(KafkaTopics))
+    consumer = scaffolding.kafka_consumer()
+    consumer.subscribe(list(KafkaTopics))
     while True:
         messages = MESSAGES.copy()
-        msg = CONSUMER.poll(timeout=1.0)
+        msg = consumer.poll(timeout=1.0)
         if msg is None:
             continue
         if msg.error():
@@ -206,13 +194,12 @@ def kafka_get():
 
 @APP.route('/kafka', methods=['PUT', 'POST'])
 def kafka_put():
-    producer = Producer({
-        "bootstrap.servers": KAFKA_SERVER,
-        "client.id": __name__
-    })
+    producer = scaffolding.kafka_producer()
     request_data = request.get_data()
-    producer.produce(PRODUCER_TOPIC, request_data)
-    print(f"Produced {request_data} on topic: '{PRODUCER_TOPIC}'")
+    # This just gets the first key it can and uses that as the topic
+    producer_topic = next(iter(KafkaTopics))
+    producer.produce(producer_topic, request_data)
+    print(f"Produced {request_data} on topic: '{producer_topic}'")
     producer.flush()
     PRODUCED_MESSAGES.inc()
     UNCONSUMED_MESSAGES.inc()
@@ -231,27 +218,31 @@ def kafka_put():
 #        Web - Finished ✅
 #        Minio - In progress ✅
 #        In-memory db - In progress ✅
-#        Kafka - In progress 🔄
+#        Kafka - In progress ✅
 #        Postgres - In progress 🔄
-#        Metrics - In progress 🔄
+#        Metrics - In progress ✅
 #        InitContainer
 #        CronJob
 #        CJI
 #        Feature Flags - Unleash
 # 3. Eventually be able to `oc process`/`oc apply` the starter app
-
-# Current goals:
-# - Figure out connection to postgres
-#   It looks like insights-core, vmaas, and insights-host-inventory all have
-#   references to psycopg2
-# - Get example of redis
 if __name__ == '__main__':
-    # We need to have a thread for consume_messages() to run in the background
+    assert LoadedConfig is not None
 
+    # We need to have a thread for consume_messages() to run in the background
     CONSUMER_THREAD = threading.Thread(target=consume_messages)
     CONSUMER_THREAD.start()
-
-    start_prometheus()
+    print("Started consumer thread")
+    postgres_conn = scaffolding.database_conn(autocommit=True)
+    print("Connected to Postgres")
+    SQL = "CREATE TABLE IF NOT EXISTS example (id SERIAL PRIMARY KEY, message VARCHAR(255));"
+    with postgres_conn.cursor() as cursor:
+        print("Created cursor")
+        cursor.execute(SQL)
+        print("Finished execution")
+    print("Created example")
+    scaffolding.start_prometheus()
+    print("Started prometheus")
     PORT = LoadedConfig.publicPort
     print(f"public port: {PORT}")
     APP.run(host='0.0.0.0', port=PORT, debug=False, threaded=True)
