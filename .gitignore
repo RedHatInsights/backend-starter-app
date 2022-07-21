@@ -2,3 +2,4 @@
 .vscode
 python-starter/build
 python-starter/__pycache__
+.venv
