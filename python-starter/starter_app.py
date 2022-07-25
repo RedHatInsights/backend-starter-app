@@ -17,32 +17,60 @@ print(f"\n\n🚀\tStarter App started at: {datetime.now()}\n")
 
 APP = Flask(__name__)
 
-UNCONSUMED_MESSAGES = Gauge("unconsumed_messages",
-                            "Number of unconsumed messages")
+UNSEEN_MESSAGES = Gauge("unseen_messages", "Number of unseen messages")
 CONSUMED_MESSAGES = Counter("consumed_messages", "Number of consumed messages")
 PRODUCED_MESSAGES = Counter("produced_messages", "Number of produced messages")
 HEALTH_CALLS = Counter("health_calls", "Number of health calls")
 
-
-@APP.route('/postgres', methods=['GET'])
-def postgres_get():
-    print("In postgres_get()")
-    cursor = scaffolding.database_conn().cursor()
-    SQL = "select * from example;"
-    result = cursor.execute(SQL)
-    print(result)
-    return result
+MESSAGES = {}
 
 
-@APP.route('/postgres', methods=['POST', 'PUT'])
-def postgres_put():
-    print("In postgres_put()")
-    # https://www.psycopg.org/docs/usage.html#the-problem-with-the-query-parameters
-    cursor = scaffolding.database_conn().cursor()
-    SQL = "insert into example (message) values (%s);"
-    message = (request.args.get("message"), )
-    cursor.execute(SQL, message)
-    return f"Inserted message {message} into database"
+def consume_messages():
+    global MESSAGES
+    consumer = scaffolding.kafka_consumer()
+    consumer.subscribe(list(KafkaTopics))
+    while True:
+        messages = MESSAGES.copy()
+        msg = consumer.poll(timeout=1.0)
+        if msg is None:
+            continue
+        if msg.error():
+            print(f"Consumer error: {msg.error()}")
+            continue
+        # message.timestamp() might be useful as well
+        # also, msg.value() is a bytes object, not a string, so decode it
+        topic, value = msg.topic(), msg.value().decode("utf-8")
+        if topic not in messages:
+            messages[topic] = []
+        messages[topic].append(value)
+        MESSAGES = messages
+        CONSUMED_MESSAGES.inc()
+        print(f"  Consumed message: {msg.value()}")
+
+
+# complementary to the consume_messages() function
+@APP.route('/kafka', methods=['GET'])
+def kafka_get():
+    global MESSAGES
+    print(f"Copying messages {MESSAGES}")
+    messages_copy = MESSAGES.copy()
+    MESSAGES = {}
+    UNSEEN_MESSAGES.dec(len(messages_copy))
+    return messages_copy
+
+
+@APP.route('/kafka', methods=['PUT', 'POST'])
+def kafka_put():
+    producer = scaffolding.kafka_producer()
+    request_data = request.args.get("message")
+    # This just gets the first key it can and uses that as the topic
+    producer_topic = next(iter(KafkaTopics))
+    producer.produce(producer_topic, request_data)
+    print(f"Produced {request_data} on topic: '{producer_topic}'")
+    producer.flush()
+    PRODUCED_MESSAGES.inc()
+    UNSEEN_MESSAGES.inc()
+    return f"In kafka_put() with request_data: {request_data}\n"
 
 
 # Generate a basic file to be used as a test file, and get them all
@@ -55,7 +83,7 @@ def minio_get():
     if not scaffolding.object_store_enabled:
         return "Minio is not enabled"
     minio_client = scaffolding.object_store_conn()
-    objects = list(minio_client.list_objects("testbucket"))
+    objects = list(minio_client.list_objects("example-bucket"))
     return {
         obj.object_name: {
             "size": obj.size,
@@ -80,10 +108,10 @@ def minio_put():
     current_time = datetime.now()
     with open(f"{current_time}.txt", "w") as f:
         f.write(str(random.getrandbits(1024)))
-    if not minio_client.bucket_exists("testbucket"):
-        minio_client.make_bucket("testbucket")
+    if not minio_client.bucket_exists("example-bucket"):
+        minio_client.make_bucket("example-bucket")
     # Upload the file to Minio
-    minio_client.fput_object("testbucket", f"{current_time}.txt",
+    minio_client.fput_object("example-bucket", f"{current_time}.txt",
                              f"{current_time}.txt")
     # Delete the temp file
     os.remove(f"{current_time}.txt")
@@ -134,6 +162,37 @@ def redis_put():
     return f"Set {key} to {value}"
 
 
+@APP.route('/postgres', methods=['GET'])
+def postgres_get():
+    print("In postgres_get()")
+    cursor = scaffolding.database_conn().cursor()
+    SQL = "SELECT * FROM example_table;"
+    cursor.execute(SQL)
+    # Since we know the scheme of the table, we can build a json object from the
+    # result of the query
+    result = {}
+    for id_value, message_value in cursor:
+        print(f"  id: {id_value}, message: {message_value}")
+        result[id_value] = message_value
+    return result
+
+
+@APP.route('/postgres', methods=['POST', 'PUT'])
+def postgres_put():
+    """
+    Handles PUT and POST requests to the /postgres endpoint. Inserts messages
+    into the database.
+    """
+    print("In postgres_put()")
+    cursor = scaffolding.database_conn().cursor()
+    # This is the approach recommended by psycopg2
+    # https://www.psycopg.org/docs/usage.html#the-problem-with-the-query-parameters
+    SQL = "INSERT INTO example_table (message) VALUES (%s);"
+    message = (request.args.get('message'), )
+    cursor.execute(SQL, message)
+    return f"Inserted message {message} into database"
+
+
 @APP.route('/livez', methods=['GET', 'PUT', 'POST'])
 def liveness():
     print("In liveness()")
@@ -153,59 +212,6 @@ def health():
     return 'In health()'
 
 
-MESSAGES = {}
-
-
-# TODO: Replace this function with one that pushes to Postgres
-# That would be much safer than this temp approach
-def consume_messages():
-    global MESSAGES
-    consumer = scaffolding.kafka_consumer()
-    consumer.subscribe(list(KafkaTopics))
-    while True:
-        messages = MESSAGES.copy()
-        msg = consumer.poll(timeout=1.0)
-        if msg is None:
-            continue
-        if msg.error():
-            print(f"Consumer error: {msg.error()}")
-            continue
-        # message.timestamp() might be useful as well
-        topic, value = msg.topic(), msg.value().decode('utf-8')
-        if topic not in messages:
-            messages[topic] = []
-        messages[topic].append(value)
-        MESSAGES = messages
-        UNCONSUMED_MESSAGES.dec()
-        CONSUMED_MESSAGES.inc()
-        print(f"  Consumed message: {msg.value()}")
-
-
-# TODO: Replace this function with one that pulls from Postgres
-# complementary to the consume_messages() function
-@APP.route('/kafka', methods=['GET'])
-def kafka_get():
-    global MESSAGES
-    print(f"Copying messages {MESSAGES}")
-    messages_copy = MESSAGES.copy()
-    MESSAGES = {}
-    return messages_copy
-
-
-@APP.route('/kafka', methods=['PUT', 'POST'])
-def kafka_put():
-    producer = scaffolding.kafka_producer()
-    request_data = request.get_data()
-    # This just gets the first key it can and uses that as the topic
-    producer_topic = next(iter(KafkaTopics))
-    producer.produce(producer_topic, request_data)
-    print(f"Produced {request_data} on topic: '{producer_topic}'")
-    producer.flush()
-    PRODUCED_MESSAGES.inc()
-    UNCONSUMED_MESSAGES.inc()
-    return f"In kafka_put() with request_data: {request_data}\n"
-
-
 # @APP.route('/')
 # def root():
 #     print("In root()")
@@ -216,16 +222,17 @@ def kafka_put():
 #  - At some point, I need to convert from Flask to Django
 # 2. get examples for each clowder provider:
 #        Web - Finished ✅
-#        Minio - In progress ✅
-#        In-memory db - In progress ✅
-#        Kafka - In progress ✅
-#        Postgres - In progress 🔄
-#        Metrics - In progress ✅
+#        Minio - Finished ✅
+#        In-memory db - Finished ✅
+#        Kafka - Finished ✅
+#        Postgres - Finished ✅
+#        Metrics - Finished ✅
 #        InitContainer
 #        CronJob
 #        CJI
 #        Feature Flags - Unleash
 # 3. Eventually be able to `oc process`/`oc apply` the starter app
+
 if __name__ == '__main__':
     assert LoadedConfig is not None
 
@@ -235,12 +242,10 @@ if __name__ == '__main__':
     print("Started consumer thread")
     postgres_conn = scaffolding.database_conn(autocommit=True)
     print("Connected to Postgres")
-    SQL = "CREATE TABLE IF NOT EXISTS example (id SERIAL PRIMARY KEY, message VARCHAR(255));"
+    SQL = "CREATE TABLE IF NOT EXISTS example_table (id SERIAL PRIMARY KEY, message VARCHAR(255));"
     with postgres_conn.cursor() as cursor:
-        print("Created cursor")
         cursor.execute(SQL)
-        print("Finished execution")
-    print("Created example")
+    print("Created example_table")
     scaffolding.start_prometheus()
     print("Started prometheus")
     PORT = LoadedConfig.publicPort
