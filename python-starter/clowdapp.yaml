@@ -25,6 +25,7 @@ objects:
       - name: worker-service
         minReplicas: 1
         podSpec:
+          # Defined in docker file
           image: ${IMAGE}:${IMAGE_TAG}
         webServices:
           public:
