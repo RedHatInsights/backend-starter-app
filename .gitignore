@@ -1,5 +1,5 @@
 .pytest_cache
 .vscode
-python-starter/build
-python-starter/__pycache__
 .venv
+__pycache__
+python-starter/build
