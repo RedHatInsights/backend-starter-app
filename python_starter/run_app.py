@@ -19,9 +19,7 @@ def main():
     assert LoadedConfig is not None
 
     # Under the hood, execute_from_command_line() calls ManagementUtility() with
-    # the arguments, but can just pass the arguments we want directly
-    # first, let's make sure everything's migrated so django doesn't complain
-    execute_from_command_line(["manage.py", "migrate"])
+    # the arguments, so we can just pass the arguments we want directly
     port = LoadedConfig.publicPort
     args = ["manage.py", "runserver", f"0:{port}"]
     execute_from_command_line(args)

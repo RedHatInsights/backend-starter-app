@@ -3,4 +3,3 @@
 .venv
 __pycache__
 python_starter/build
-python_starter/db.sqlite3

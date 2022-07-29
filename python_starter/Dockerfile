@@ -9,7 +9,7 @@ COPY requirements.txt /
 RUN pip install -r /requirements.txt
 COPY . /
 
-CMD python /manage.py runserver 0:8000
+CMD python /run_app.py
 
 
 # ENV NODEJS_VERSION=14 \

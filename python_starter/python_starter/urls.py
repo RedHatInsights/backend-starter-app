@@ -28,5 +28,4 @@ urlpatterns = [
     path('redis', views.handle_redis),
     path('postgres', views.handle_postgres),
 ]
-if not migrating:
-    views.start_app()
+views.start_app()
