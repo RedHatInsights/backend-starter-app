@@ -8,7 +8,7 @@ from app_common_python import KafkaTopics, LoadedConfig
 from flask import Flask, make_response, request
 from prometheus_client import Counter, Gauge
 
-import starter_helper
+import python_starter.python_starter.starter_helper as starter_helper
 
 scaffolding = starter_helper.StarterHelper()
 scaffolding.print_all_info()
@@ -168,13 +168,15 @@ def postgres_get():
     cursor = scaffolding.database_conn().cursor()
     SQL = "SELECT * FROM example_table;"
     cursor.execute(SQL)
-    # Since we know the scheme of the table, we can build a json object from the
-    # result of the query
-    result = {}
-    for id_value, message_value in cursor:
-        print(f"  id: {id_value}, message: {message_value}")
-        result[id_value] = message_value
-    return result
+    return dict(cursor)
+
+@APP.route('/postgres_init', methods=['GET'])
+def postgres_init_get():
+    print("In postgres_init_get()")
+    cursor = scaffolding.database_conn().cursor()
+    SQL = "SELECT * FROM init_container;"
+    cursor.execute(SQL)
+    return dict(cursor)
 
 
 @APP.route('/postgres', methods=['POST', 'PUT'])
@@ -227,13 +229,13 @@ def health():
 #        Kafka - Finished ✅
 #        Postgres - Finished ✅
 #        Metrics - Finished ✅
-#        InitContainer
+#        InitContainer - Finished ✅
 #        CronJob
 #        CJI
 #        Feature Flags - Unleash
 # 3. Eventually be able to `oc process`/`oc apply` the starter app
 
-if __name__ == '__main__':
+def start_app():
     assert LoadedConfig is not None
 
     # We need to have a thread for consume_messages() to run in the background
@@ -248,9 +250,6 @@ if __name__ == '__main__':
     print("Created example_table")
     scaffolding.start_prometheus()
     print("Started prometheus")
-    PORT = LoadedConfig.publicPort
-    print(f"public port: {PORT}")
-    APP.run(host='0.0.0.0', port=PORT, debug=False, threaded=True)
 
 # Build stuff
 # Push to quay

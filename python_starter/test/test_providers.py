@@ -27,6 +27,7 @@ def test_kafka_consume():
     url = f'{location}/{provider}'
     seen = 0
     response = requests.get(url)
+    print(response)
     values = json.loads(response.text)['example-topic']
     seen = len(values)
     print(f"{seen} Kafka messages received successfully")
@@ -102,3 +103,13 @@ def test_postgres_consume():
     values = json.loads(response.text)
     assert response.status_code == 200
     assert len(values) >= postgres_tests
+
+
+def test_postgres_init_consume():
+    provider = 'postgres_init'
+    url = f'{location}/{provider}'
+    response = requests.get(url)
+    values = json.loads(response.text)
+    assert response.status_code == 200
+    # Number of values sent is in `init_container_db_setup.py`
+    assert len(values) >= 100

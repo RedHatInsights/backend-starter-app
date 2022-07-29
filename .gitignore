@@ -2,4 +2,5 @@
 .vscode
 .venv
 __pycache__
-python-starter/build
+python_starter/build
+python_starter/db.sqlite3

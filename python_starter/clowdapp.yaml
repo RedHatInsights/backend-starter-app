@@ -17,7 +17,7 @@ objects:
       partitions: 1
       replicas: 1
     database:
-      name: dBaseName
+      name: exampleDatabase
     inMemoryDb: true
     objectStore:
       - name
@@ -27,19 +27,15 @@ objects:
         podSpec:
           # Defined in docker file
           image: ${IMAGE}:${IMAGE_TAG}
+          initContainers:
+          - name: example-init-container
+            inheritEnv: true
+            command: ["python", "/python_starter/init_container_db_setup.py"]
         webServices:
           public:
             enabled: true
           metrics:
             enabled: true
-        # initContainers:
-        #   - env:
-        #     - name: INIT_CONTAINER
-        #       value: "True"
-        #     inheritEnv: true
-        #     args:
-        #       - sh
-        #       - /opt/app-root/src/deploy/init-container-setup.sh
         livenessProbe:
           failureThreshold: 3
           httpGet:

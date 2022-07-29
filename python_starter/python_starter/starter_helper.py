@@ -129,6 +129,7 @@ class StarterHelper:
         Initializes metrics. Called on initialization of the class.
         """
         assert LoadedConfig is not None
+        self.prometheus_started = False
         self.metrics_port = LoadedConfig.metricsPort
 
     def _init_cloudwatch(self):
@@ -228,6 +229,7 @@ class StarterHelper:
         else:
             print(f"\t▪ Host: {self.db_hostname}")
             print(f"\t▪ Port: {self.db_port}")
+            print(f"\t▪ Database: {self.db_name}")
             print(f"\t▪ Username: {self.db_username}")
             print(f"\t▪ Password: {self.db_password}")
             print(f"\t▪ Admin Username: {self.db_admin_username}")
@@ -266,7 +268,9 @@ class StarterHelper:
         """
         assert LoadedConfig is not None
         assert LoadedConfig.metricsPort is not None
-        start_http_server(port=int(LoadedConfig.metricsPort))
+        if not self.prometheus_started:
+            start_http_server(port=int(LoadedConfig.metricsPort))
+            self.prometheus_started = True
 
     def database_conn(self,
                       autocommit: Optional[bool] = None
