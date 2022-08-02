@@ -27,5 +27,7 @@ urlpatterns = [
     path('minio', views.handle_minio),
     path('redis', views.handle_redis),
     path('postgres', views.handle_postgres),
+    path('postgres_init', views.postgres_init_get),
+    path('featureflag', views.feature_flag_get),
 ]
 views.start_app()
