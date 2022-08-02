@@ -49,33 +49,47 @@ def consume_messages():
 # NOTE: https://docs.djangoproject.com/en/4.0/ref/csrf/
 # The approaches below (and in particular the `csrf_exempt` decorator) are not
 # necessarily safe to be used in a production environment
+
+
+# complementary to the consume_messages() function
+def kafka_get(request) -> HttpResponse:
+    global MESSAGES
+    print(f"Copying messages {MESSAGES}")
+    messages_copy = MESSAGES.copy()
+    MESSAGES = {}
+    UNSEEN_MESSAGES.dec(len(messages_copy))
+    return JsonResponse(messages_copy)
+
+
+def kafka_put(request) -> HttpResponse:
+    """
+    http://127.0.0.1:8000/kafka?message=hello
+    """
+    producer = scaffolding.kafka_producer()
+    query_dict = request.GET
+    request_data = query_dict.get("message", None)
+    if request_data is None:
+        return HttpResponse("No message provided", status=400)
+    # This just gets the first key it can and uses that as the topic
+    producer_topic = next(iter(KafkaTopics))
+    producer.produce(producer_topic, request_data)
+    print(f"Produced {request_data} on topic: '{producer_topic}'")
+    producer.flush()
+    PRODUCED_MESSAGES.inc()
+    UNSEEN_MESSAGES.inc()
+    return HttpResponse(f"In kafka_put() with request_data: {request_data}")
+
+
 @csrf_exempt
-def handle_kafka(request, **kwargs) -> HttpResponse:
+def handle_kafka(request) -> HttpResponse:
     if request.method == 'GET':
-        global MESSAGES
-        print(f"Copying messages {MESSAGES}")
-        messages_copy = MESSAGES.copy()
-        MESSAGES = {}
-        UNSEEN_MESSAGES.dec(len(messages_copy))
-        return JsonResponse(messages_copy)
+        return kafka_get(request)
     elif request.method in ['POST', 'PUT']:
-        query_dict = request.GET
-        producer = scaffolding.kafka_producer()
-        request_data = query_dict.get('message', None)
-        # This just gets the first key it can and uses that as the topic
-        producer_topic = next(iter(KafkaTopics))
-        producer.produce(producer_topic, request_data)
-        print(f"Produced {request_data} on topic: '{producer_topic}'")
-        producer.flush()
-        PRODUCED_MESSAGES.inc()
-        UNSEEN_MESSAGES.inc()
-        return HttpResponse(
-            f"In kafka_put() with request_data: {request_data}")
+        return kafka_put(request)
     return HttpResponse("Invalid method", status_code=400)
 
 
 # Generate a basic file to be used as a test file, and get them all
-@csrf_exempt
 def minio_get(request) -> HttpResponse:
     """
     Handles GET requests to the /minio endpoint. Returns object data from Minio.
@@ -94,7 +108,6 @@ def minio_get(request) -> HttpResponse:
     })
 
 
-@csrf_exempt
 def minio_put(request) -> HttpResponse:
     """
     Handles PUT and POST requests to the /minio endpoint. Adds example files
@@ -128,7 +141,6 @@ def handle_minio(request) -> HttpResponse:
     return HttpResponse("Invalid method")
 
 
-@csrf_exempt
 def redis_get(request) -> HttpResponse:
     """
     Handles GET requests to the /redis endpoint. Returns the value associated
@@ -139,7 +151,8 @@ def redis_get(request) -> HttpResponse:
     print("In redis_get()")
     if not scaffolding.in_memory_db_enabled:
         return HttpResponse("Redis is not enabled")
-    key = request.args.get("key")
+    query_dict = request.GET
+    key = query_dict.get("key", None)
     if key is None:
         return HttpResponse("No key specified", 400)
     result = scaffolding.in_memory_db_conn().get(key)
@@ -149,7 +162,6 @@ def redis_get(request) -> HttpResponse:
     return HttpResponse(result)
 
 
-@csrf_exempt
 def redis_put(request) -> HttpResponse:
     """
     Handles PUT and POST requests to the /redis endpoint. Adds a message to
@@ -160,10 +172,11 @@ def redis_put(request) -> HttpResponse:
     """
     print("In redis_put()")
 
-    key = request.args.get("key")
+    query_dict = request.GET
+    key = query_dict.get("key", None)
     if key is None:
         return HttpResponse("No key provided", 400)
-    value = request.args.get("value")
+    value = query_dict.get("value", None)
     if value is None:
         return HttpResponse("No value provided", 400)
     result = scaffolding.in_memory_db_conn().set(key, value)
@@ -181,13 +194,12 @@ def handle_redis(request) -> HttpResponse:
     return HttpResponse("Invalid method")
 
 
-@csrf_exempt
 def postgres_get(request) -> HttpResponse:
     print("In postgres_get()")
     cursor = scaffolding.database_conn().cursor()
     SQL = "SELECT * FROM example_table;"
     cursor.execute(SQL)
-    return HttpResponse(dict(cursor))
+    return JsonResponse(dict(cursor))
 
 
 @csrf_exempt
@@ -196,10 +208,9 @@ def postgres_init_get(request) -> HttpResponse:
     cursor = scaffolding.database_conn().cursor()
     SQL = "SELECT * FROM init_container;"
     cursor.execute(SQL)
-    return HttpResponse(dict(cursor))
+    return JsonResponse(dict(cursor))
 
 
-@csrf_exempt
 def postgres_put(request) -> HttpResponse:
     """
     Handles PUT and POST requests to the /postgres endpoint. Inserts messages
@@ -210,9 +221,37 @@ def postgres_put(request) -> HttpResponse:
     # This is the approach recommended by psycopg2
     # https://www.psycopg.org/docs/usage.html#the-problem-with-the-query-parameters
     SQL = "INSERT INTO example_table (message) VALUES (%s);"
-    message = (request.args.get('message'), )
+    query_dict = request.GET
+    message = (query_dict.get("message", None), )
     cursor.execute(SQL, message)
     return HttpResponse(f"Inserted message {message} into database")
+
+
+@csrf_exempt
+def feature_flag_get(request) -> HttpResponse:
+    """
+    Handles GET requests to the /featureflag endpoint. Returns the value of the
+    specified feature flag. If the flag does not exist, returns False.
+
+    `flag` is a required input to the request.
+    """
+    if request.method != 'GET':
+        return HttpResponse("Invalid method", 400)
+    print("In feature_flag_get()")
+    query_dict = request.GET
+    print("After query_dict")
+    flag = query_dict.get("flag", None)
+    print("After flag")
+    if flag is None:
+        return HttpResponse("No flag specified", 400)
+    print("After flag not None check")
+    connection = scaffolding.feature_flags_conn()
+    print("Connection complete")
+    result = connection.is_enabled(flag)
+    print(f"Feature flag result: {result}")
+    if result is None:
+        return HttpResponse("Flag not found in database", 404)
+    return HttpResponse(result)
 
 
 @csrf_exempt
@@ -239,8 +278,6 @@ def readiness(request) -> HttpResponse:
 
 
 # /healthz
-
-
 @csrf_exempt
 def health(request) -> HttpResponse:
     print(f"Request: {request}")
@@ -281,9 +318,9 @@ def start_app() -> None:
 #        Postgres - Finished ✅
 #        Metrics - Finished ✅
 #        InitContainer - Finished ✅
+#        Feature Flags - Finished ✅
 #        CronJob
 #        CJI
-#        Feature Flags - Unleash
 # 3. Eventually be able to `oc process`/`oc apply` the starter app
 
 # Build stuff

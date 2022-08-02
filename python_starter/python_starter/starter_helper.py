@@ -7,6 +7,7 @@ from confluent_kafka import Consumer, Producer
 from minio import Minio
 from prometheus_client import start_http_server
 from typing import Optional
+from UnleashClient import UnleashClient
 
 
 # Class for raising Clowder provider errors
@@ -21,6 +22,7 @@ class StarterHelper:
     A helper class for the starter app, which provides information that can be
     printed out as well as connections to various providers.
     """
+
     def __init__(self):
         """
         Initializes the class.
@@ -28,20 +30,25 @@ class StarterHelper:
         Raises
         ------
         ValueError
-            If clowder is not enabled or if the config is not loaded.
+            If clowder is not enabled, the config is not loaded, or there is
+            no metadata for the app.
         """
         if not isClowderEnabled():
             raise ValueError("😿Clowder is not enabled")
         self.environment = environ.Env()
         if LoadedConfig is None:
             raise ValueError("LoadedConfig is None, impossible to continue")
+        if LoadedConfig.metadata is None:
+            raise ValueError("Metadata does not exist for specifying a name")
 
+        self.app_name = LoadedConfig.metadata.name
         self._init_db()
         self._init_in_memory_db()
         self._init_kafka()
         self._init_minio()
         self._init_cloudwatch()
         self._init_metrics()
+        self._init_feature_flags()
 
     def _init_db(self):
         """
@@ -79,15 +86,15 @@ class StarterHelper:
         assert LoadedConfig is not None
         if LoadedConfig.inMemoryDb is None:
             self.in_memory_db_enabled = False
-            self.in_memory_db_host = self.environment.get_value(
+            host = self.in_memory_db_host = self.environment.get_value(
                 "REDIS_HOST", default="localhost")
-            self.in_memory_db_port = self.environment.get_value("REDIS_PORT",
-                                                                default="6379")
+            port = self.in_memory_db_port = self.environment.get_value(
+                "REDIS_PORT", default="6379")
         else:
             self.in_memory_db_enabled = True
-            self.in_memory_db_host = LoadedConfig.inMemoryDb.hostname
-            self.in_memory_db_port = LoadedConfig.inMemoryDb.port
-        self.default_redis_url = f"redis://{self.in_memory_db_host}:{self.in_memory_db_port}/0"
+            host = self.in_memory_db_host = LoadedConfig.inMemoryDb.hostname
+            port = self.in_memory_db_port = LoadedConfig.inMemoryDb.port
+        self.default_redis_url = f"redis://{host}:{port}/0"
 
     def _init_kafka(self):
         """
@@ -117,12 +124,12 @@ class StarterHelper:
             self.object_store_enabled = False
         else:
             self.object_store_enabled = True
-            self.object_store_hostname = LoadedConfig.objectStore.hostname
-            self.object_store_port = LoadedConfig.objectStore.port
+            host = self.object_store_hostname = LoadedConfig.objectStore.hostname
+            port = self.object_store_port = LoadedConfig.objectStore.port
             self.object_store_tls = LoadedConfig.objectStore.tls
             self.object_store_access_key = LoadedConfig.objectStore.accessKey
             self.object_store_secret_key = LoadedConfig.objectStore.secretKey
-            self.object_store_server = f"{self.object_store_hostname}:{self.object_store_port}"
+            self.object_store_server = f"{host}:{port}"
 
     def _init_metrics(self):
         """
@@ -163,6 +170,23 @@ class StarterHelper:
 
         self.cw_create_log_group = self.environment.bool("CW_CREATE_LOG_GROUP",
                                                          default=False)
+
+    def _init_feature_flags(self):
+        """
+        Initializes feature flags. Called on initialization of the class.
+        """
+        assert LoadedConfig is not None
+        if LoadedConfig.featureFlags is None:
+            self.feature_flags_enabled = False
+            return
+
+        self.feature_flags_enabled = True
+        ff = LoadedConfig.featureFlags
+        self.feature_flags_client_access_token = ff.clientAccessToken
+        # LoadedConfig.featureFlags.scheme.valueAsString() requires an enum, but
+        # LoadedConfig.featureFlags.scheme is an Enum
+        scheme = ff.scheme.valueAsString(ff.scheme)
+        self.feature_flags_url = f"{scheme}://{ff.hostname}:{ff.port}/api"
 
     def print_all_info(self):
         """
@@ -272,9 +296,7 @@ class StarterHelper:
             start_http_server(port=int(LoadedConfig.metricsPort))
             self.prometheus_started = True
 
-    def database_conn(self,
-                      autocommit: Optional[bool] = None
-                      ) -> connection:
+    def database_conn(self, autocommit: Optional[bool] = None) -> connection:
         """
         Returns a connection to the database specified by the Clowder config.
 
@@ -315,10 +337,10 @@ class StarterHelper:
             raise ProviderError("Database is not enabled") from e
 
     def admin_database_conn(self,
-                            autocommit: Optional[bool] = None
-                            ) -> connection:
+                            autocommit: Optional[bool] = None) -> connection:
         """
-        Returns an admin connection to the database specified by the Clowder config.
+        Returns an admin connection to the database specified by the Clowder
+        config.
 
         Parameters
         ----------
@@ -349,8 +371,8 @@ class StarterHelper:
                     host=self.db_hostname,
                     port=self.db_port,
                     database=self.db_name,
-                    user=self.db_username,
-                    password=self.db_password)
+                    user=self.db_admin_username,
+                    password=self.db_admin_password)
                 if autocommit is not None:
                     self._admin_database_connection.autocommit = autocommit
                 return self._admin_database_connection
@@ -358,7 +380,8 @@ class StarterHelper:
 
     def object_store_conn(self) -> Minio:
         """
-        Returns a connection to the object store specified by the Clowder config.
+        Returns a connection to the object store specified by the Clowder
+        config.
 
         Returns
         -------
@@ -404,10 +427,8 @@ class StarterHelper:
         except AttributeError as e:
             if self.kafka_enabled:
                 self._kafka_consumer_conn = Consumer({
-                    "bootstrap.servers":
-                    self.kafka_server,
-                    "group.id":
-                    __name__
+                    "bootstrap.servers": self.kafka_server,
+                    "group.id": __name__
                 })
                 return self._kafka_consumer_conn
             raise ProviderError("Kafka is not enabled") from e
@@ -433,10 +454,8 @@ class StarterHelper:
         except AttributeError as e:
             if self.kafka_enabled:
                 self._kafka_producer_conn = Producer({
-                    "bootstrap.servers":
-                    self.kafka_server,
-                    "client.id":
-                    __name__
+                    "bootstrap.servers": self.kafka_server,
+                    "client.id": __name__
                 })
                 return self._kafka_producer_conn
             raise ProviderError("Kafka is not enabled") from e
@@ -465,3 +484,51 @@ class StarterHelper:
                                          port=self.in_memory_db_port)
                 return self._redis_conn
             raise ProviderError("In-memory db is not enabled") from e
+
+    def feature_flags_conn(self) -> UnleashClient:
+        """
+        Returns a connection to the feature flags server specified by the
+        Clowder config.
+
+        Returns
+        -------
+        UnleashClient
+            A connection to the feature flags server
+
+        Raises
+        ------
+        ProviderError
+            If the feature flags server is not enabled in the Clowder config
+            but this method is called.
+        """
+        print("Getting feature flags connection")
+        try:
+            print("Trying to return cached connection")
+            return self._feature_flags_conn
+        except AttributeError as e:
+            print("Cached connection doesn't exist, creating new connection")
+            if self.feature_flags_enabled:
+                print("Feature flags is enabled")
+                if self.feature_flags_client_access_token is not None:
+                    print("\n\n  Using feature flags client access token:")
+                    print(f"    {self.feature_flags_client_access_token}\n\n")
+                # Unleash client takes custom_headers as dict | None, so we
+                # can directly pass client access token I believe
+                print("Creating feature flags client")
+                self._feature_flags_conn = UnleashClient(
+                    url=self.feature_flags_url,
+                    app_name=self.app_name,
+                    custom_headers=self.feature_flags_client_access_token)
+                print("Client created")
+                print(f"conn: {self._feature_flags_conn}")
+                try:
+                    # ? Why does initialize_client() fail?
+                    self._feature_flags_conn.initialize_client()
+                except Exception:
+                    print("Invalid schema")
+                    del self._feature_flags_conn
+                    raise ProviderError("Invalid featureflags schema") from e
+                print("Client initialized")
+                return self._feature_flags_conn
+            print("self.feature_flags_enabled is not True")
+            raise ProviderError("Feature flags server is not enabled") from e
