@@ -64,29 +64,31 @@ objects:
                 command:
                   - python
                   - /python_starter/init_container_db_setup.py
+            livenessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /livez
+                # Use the same port as web services
+                port: web
+                scheme: HTTP
+              periodSeconds: 30
+              successThreshold: 1
+              timeoutSeconds: 60
+            readinessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /readyz
+                port: web
+                scheme: HTTP
+              periodSeconds: 30
+              successThreshold: 1
+              timeoutSeconds: 60
           webServices:
             public:
               enabled: true
             metrics:
               enabled: true
-          livenessProbe:
-            failureThreshold: 3
-            httpGet:
-              path: /livez
-              port: 8000
-              scheme: HTTP
-            periodSeconds: 30
-            successThreshold: 1
-            timeoutSeconds: 60
-          readinessProbe:
-            failureThreshold: 3
-            httpGet:
-              path: /readyz
-              port: 8000
-              scheme: HTTP
-            periodSeconds: 30
-            successThreshold: 1
-            timeoutSeconds: 60
+
   - apiVersion: cloud.redhat.com/v1alpha1
     kind: ClowdJobInvocation
     metadata:
