@@ -2,8 +2,7 @@ import os
 import random
 import threading
 from datetime import datetime
-from django.shortcuts import render
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, HttpRequest
 from django.views.decorators.csrf import csrf_exempt
 
 from app_common_python import KafkaTopics, LoadedConfig
@@ -23,7 +22,12 @@ MESSAGES = {}
 
 # NOTE: this is intended to be used in production, a safer method should be used
 # than saving the messages directly to memory.
-def consume_messages():
+def consume_messages() -> None:
+    """
+    This function is intended to be run in a separate thread. It will consume
+    messages from the Kafka topic and save them to a dictionary. The dictionary
+    is then accessible to the kafka_get() function as a global variable.
+    """
     global MESSAGES
     consumer = scaffolding.kafka_consumer()
     consumer.subscribe(list(KafkaTopics))
@@ -52,20 +56,47 @@ def consume_messages():
 
 
 # complementary to the consume_messages() function
-def kafka_get(request) -> HttpResponse:
+def kafka_get(request: HttpRequest) -> HttpResponse:
+    """
+    Handles GET requests to the /kafka endpoint. Returns the messages from the
+    Kafka topic as specified in the clowdapp config.
+    Example url: http://127.0.0.1:8000/kafka?message=hello
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
+    """
     global MESSAGES
-    print(f"Copying messages {MESSAGES}")
     messages_copy = MESSAGES.copy()
     MESSAGES = {}
     UNSEEN_MESSAGES.dec(len(messages_copy))
     return JsonResponse(messages_copy)
 
 
-def kafka_put(request) -> HttpResponse:
+def kafka_put(request: HttpRequest) -> HttpResponse:
     """
-    http://127.0.0.1:8000/kafka?message=hello
+    Handles PUT and POST requests to the /kafka endpoint. Adds a message to
+    the Kafka topic specified in the clowdapp config.
+    Example url: http://127.0.0.1:8000/kafka?message=hello
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
     """
     producer = scaffolding.kafka_producer()
+    # request.GET gives us a QueryDict, and we can grab args from that
     query_dict = request.GET
     request_data = query_dict.get("message", None)
     if request_data is None:
@@ -81,7 +112,25 @@ def kafka_put(request) -> HttpResponse:
 
 
 @csrf_exempt
-def handle_kafka(request) -> HttpResponse:
+def handle_kafka(request: HttpRequest) -> HttpResponse:
+    """
+    Handles GET, PUT, and POST requests to the /kafka endpoint. If kafka is
+    not enabled, returns a message stating as such.
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
+    """
+    # If not enabled, return a message stating as such
+    if not scaffolding.kafka_enabled:
+        return HttpResponse("Kafka is not enabled", status=400)
+    # Otherwise handle the request
     if request.method == 'GET':
         return kafka_get(request)
     elif request.method in ['POST', 'PUT']:
@@ -90,13 +139,24 @@ def handle_kafka(request) -> HttpResponse:
 
 
 # Generate a basic file to be used as a test file, and get them all
-def minio_get(request) -> HttpResponse:
+def minio_get(request: HttpRequest) -> HttpResponse:
     """
-    Handles GET requests to the /minio endpoint. Returns object data from Minio.
+    Handles GET requests to the /minio endpoint. Returns object data from Minio
+    in the form of a json object made of the object names, their sizes, and the
+    time they were last modified.
+    Example url: http://127.0.0.1:8000/minio
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
     """
-    print("In minio_get()")
-    if not scaffolding.object_store_enabled:
-        return HttpResponse("Minio is not enabled")
+    # Get the object store connection, then return objects from it
     minio_client = scaffolding.object_store_conn()
     objects = list(minio_client.list_objects("example-bucket"))
     return JsonResponse({
@@ -108,15 +168,23 @@ def minio_get(request) -> HttpResponse:
     })
 
 
-def minio_put(request) -> HttpResponse:
+def minio_put(request: HttpRequest) -> HttpResponse:
     """
     Handles PUT and POST requests to the /minio endpoint. Adds example files
     to an example bucket called `testbucket` with the file name as the timestamp
     and the file contents as a string of random bits.
+    Example url: http://127.0.0.1:8000/minio
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
     """
-    print("In minio_put()")
-    if not scaffolding.object_store_enabled:
-        return HttpResponse("Minio is not enabled")
     minio_client = scaffolding.object_store_conn()
     # Write a file containing a random string locally as an example for Minio
     current_time = datetime.now()
@@ -133,94 +201,163 @@ def minio_put(request) -> HttpResponse:
 
 
 @csrf_exempt
-def handle_minio(request) -> HttpResponse:
+def handle_minio(request: HttpRequest) -> HttpResponse:
+    """
+    Handles GET, PUT, and POST requests to the /minio endpoint. Returns a
+    message stating that Minio is not enabled if it is not enabled.
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
+    """
+    # If not enabled, return a message stating as such
+    if not scaffolding.object_store_enabled:
+        return HttpResponse("Minio is not enabled", status=400)
+    # Otherwise handle the request
     if request.method == 'GET':
         return minio_get(request)
     elif request.method in ['POST', 'PUT']:
         return minio_put(request)
-    return HttpResponse("Invalid method")
+    return HttpResponse("Invalid method", status=400)
 
 
-def redis_get(request) -> HttpResponse:
+def redis_get(request: HttpRequest) -> HttpResponse:
     """
     Handles GET requests to the /redis endpoint. Returns the value associated
-    with the specified key. If the key does not exist, returns a 404.
+    with the specified key. If the key does not exist, returns a 404. `key` is
+    a required input to the request.
+    Example url: http://127.0.0.1:8000/redis?key=example_key
 
-    `key` is a required input to the request.
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
     """
-    print("In redis_get()")
-    if not scaffolding.in_memory_db_enabled:
-        return HttpResponse("Redis is not enabled")
+    # request.GET gives us a QueryDict, and we can grab args from that
     query_dict = request.GET
     key = query_dict.get("key", None)
     if key is None:
-        return HttpResponse("No key specified", 400)
+        return HttpResponse("No key specified", status=400)
+    # With the key specified, get the value from the in-memory db
     result = scaffolding.in_memory_db_conn().get(key)
-    print(f"Redis result: {result}")
     if result is None:
-        return HttpResponse("Key not found in database", 404)
+        return HttpResponse("Key not found in database", status=404)
     return HttpResponse(result)
 
 
-def redis_put(request) -> HttpResponse:
+def redis_put(request: HttpRequest) -> HttpResponse:
     """
     Handles PUT and POST requests to the /redis endpoint. Adds a message to
     the specified key in the Redis database. If the key already exists, it is
-    overwritten.
+    overwritten. `key` and `value` are required inputs to the request.
+    Example url: http://127.0.0.1:8000/redis?key=example_key&value=example_value
 
-    `key` and `value` are required inputs to the request.
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
     """
-    print("In redis_put()")
-
+    # request.GET gives us a QueryDict, and we can grab args from that
     query_dict = request.GET
     key = query_dict.get("key", None)
     if key is None:
-        return HttpResponse("No key provided", 400)
+        return HttpResponse("No key provided", status=400)
     value = query_dict.get("value", None)
     if value is None:
-        return HttpResponse("No value provided", 400)
+        return HttpResponse("No value provided", status=400)
+    # With the key and value specified we can set the value in the in-memory db
     result = scaffolding.in_memory_db_conn().set(key, value)
     if not result:
-        return HttpResponse("Failed to set properly", 500)
+        return HttpResponse("Failed to set properly", status=500)
     return HttpResponse("Set {key} to {value}")
 
 
 @csrf_exempt
-def handle_redis(request) -> HttpResponse:
+def handle_redis(request: HttpRequest) -> HttpResponse:
+    """
+    Handles GET, PUT, and POST requests to the /redis endpoint. Returns a
+    message stating that Redis is not enabled if it is not enabled.
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
+    """
+    # If not enabled, return a message stating as such
+    if not scaffolding.in_memory_db_enabled:
+        return HttpResponse("Redis is not enabled", status=400)
+    # Otherwise handle the request
     if request.method == 'GET':
         return redis_get(request)
     elif request.method in ['POST', 'PUT']:
         return redis_put(request)
-    return HttpResponse("Invalid method")
+    return HttpResponse("Invalid method", status=400)
 
 
-def postgres_get(request) -> HttpResponse:
-    print("In postgres_get()")
+def postgres_get(request: HttpRequest) -> HttpResponse:
+    """
+    Handles GET requests to the /postgres endpoint. Returns all messages added
+    with postgres_put.
+    Example url: http://127.0.0.1:8000/postgres
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
+    """
     cursor = scaffolding.database_conn().cursor()
     SQL = "SELECT * FROM example_table;"
     cursor.execute(SQL)
     return JsonResponse(dict(cursor))
 
 
-@csrf_exempt
-def postgres_init_get(request) -> HttpResponse:
-    print("In postgres_init_get()")
-    cursor = scaffolding.database_conn().cursor()
-    SQL = "SELECT * FROM init_container;"
-    cursor.execute(SQL)
-    return JsonResponse(dict(cursor))
-
-
-def postgres_put(request) -> HttpResponse:
+def postgres_put(request: HttpRequest) -> HttpResponse:
     """
     Handles PUT and POST requests to the /postgres endpoint. Inserts messages
-    into the database.
+    into the database. `message` is a required input to the request.
+    Example url: http://127.0.0.1:8000/postgres?message=example_message
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
     """
-    print("In postgres_put()")
     cursor = scaffolding.database_conn().cursor()
     # This is the approach recommended by psycopg2
     # https://www.psycopg.org/docs/usage.html#the-problem-with-the-query-parameters
     SQL = "INSERT INTO example_table (message) VALUES (%s);"
+    # request.GET gives us a QueryDict, and we can grab args from that
     query_dict = request.GET
     message = (query_dict.get("message", None), )
     cursor.execute(SQL, message)
@@ -228,104 +365,212 @@ def postgres_put(request) -> HttpResponse:
 
 
 @csrf_exempt
-def feature_flag_get(request) -> HttpResponse:
+def handle_postgres(request: HttpRequest) -> HttpResponse:
     """
-    Handles GET requests to the /featureflag endpoint. Returns the value of the
-    specified feature flag. If the flag does not exist, returns False.
+    Handles GET, PUT, and POST requests to the /postgres endpoint. Returns a
+    message stating that Postgres is not enabled if it is not enabled.
 
-    `flag` is a required input to the request.
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
     """
-    if request.method != 'GET':
-        return HttpResponse("Invalid method", 400)
-    print("In feature_flag_get()")
-    query_dict = request.GET
-    print("After query_dict")
-    flag = query_dict.get("flag", None)
-    print("After flag")
-    if flag is None:
-        return HttpResponse("No flag specified", 400)
-    print("After flag not None check")
-    connection = scaffolding.feature_flags_conn()
-    print("Connection complete")
-    result = connection.is_enabled(flag)
-    print(f"Feature flag result: {result}")
-    if result is None:
-        return HttpResponse("Flag not found in database", 404)
-    return HttpResponse(result)
-
-
-@csrf_exempt
-def handle_postgres(request) -> HttpResponse:
+    # If not enabled, return a message stating as such
+    if not scaffolding.database_enabled:
+        return HttpResponse("Postgres is not enabled", status=400)
+    # Otherwise handle the request
     if request.method == 'GET':
         return postgres_get(request)
     elif request.method in ['POST', 'PUT']:
         return postgres_put(request)
-    return HttpResponse("Invalid method")
+    return HttpResponse("Invalid method", status=400)
 
 
-# /livez
+def postgres_init_get(request: HttpRequest) -> HttpResponse:
+    """
+    Handles GET requests to the /postgres_init endpoint.
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
+    """
+    cursor = scaffolding.database_conn().cursor()
+    SQL = "SELECT * FROM init_container;"
+    cursor.execute(SQL)
+    return JsonResponse(dict(cursor))
+
+
 @csrf_exempt
-def liveness(request) -> HttpResponse:
-    print("In liveness()")
-    return HttpResponse("In liveness()")
+def handle_postgres_init(request: HttpRequest) -> HttpResponse:
+    """
+    Handles GET requests to the /postgres_init endpoint. Returns a message
+    stating that Postgres is not enabled if it is not enabled.
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
+    """
+    # If not enabled, return a message stating as such
+    if not scaffolding.database_enabled:
+        return HttpResponse("Postgres is not enabled", status=400)
+    # Otherwise handle the request
+    if request.method == 'GET':
+        return postgres_init_get(request)
+    return HttpResponse("Invalid method", status=400)
 
 
-# /readyz
 @csrf_exempt
-def readiness(request) -> HttpResponse:
-    print("In readiness()")
-    return HttpResponse("In readiness()")
+def feature_flag_get(request: HttpRequest) -> HttpResponse:
+    """
+    Handles GET requests to the /featureflag endpoint. Returns the value of the
+    specified feature flag. If the flag does not exist, returns False. `flag` is
+    a required input to the request.
+    Example url: http://127.0.0.1:8000/featureflag?flag=example_flag
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
+    """
+    # request.GET gives us a QueryDict, and we can grab args from that
+    query_dict = request.GET
+    flag = query_dict.get("flag", None)
+    if flag is None:
+        return HttpResponse("No flag specified", status=400)
+    connection = scaffolding.feature_flags_conn()
+    result = connection.is_enabled(flag)
+    if result is None:
+        return HttpResponse("Flag not found in database", status=404)
+    return HttpResponse(result)
 
 
-# /healthz
 @csrf_exempt
-def health(request) -> HttpResponse:
-    print(f"Request: {request}")
-    print(f"Request type: {type(request)}")
+def handle_feature_flag(request: HttpRequest) -> HttpResponse:
+    """
+    Handles GET requests to the /featureflag endpoint. Returns a message
+    stating that Feature Flags is not enabled if it is not enabled.
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
+    """
+    # If not enabled, return a message stating as such
+    if not scaffolding.feature_flags_enabled:
+        return HttpResponse("Feature Flags is not enabled", status=400)
+    # Otherwise handle the request
+    if request.method == 'GET':
+        return feature_flag_get(request)
+    return HttpResponse("Invalid method", status=400)
+
+
+@csrf_exempt
+def healthz(request: HttpRequest) -> HttpResponse:
+    """
+    Handles requests to the /healthz endpoint.
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
+    """
     HEALTH_CALLS.inc()
-    print("In health()")
     return HttpResponse("In health()")
 
 
+@csrf_exempt
+def liveness(request: HttpRequest) -> HttpResponse:
+    """
+    Handles requests to the /livez endpoint.
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
+    """
+    return HttpResponse("In liveness()")
+
+
+@csrf_exempt
+def readiness(request: HttpRequest) -> HttpResponse:
+    """
+    Handles requests to the /readyz endpoint.
+
+    Parameters
+    ----------
+    request : HttpRequest
+        The request object. Handled by Django.
+
+    Returns
+    -------
+    HttpResponse
+        The response object. Handled by Django.
+    """
+    return HttpResponse("In readiness()")
+
+
 def start_app() -> None:
+    """
+    Handles some startup tasks for the app, such as printing information about
+    what providers are used in the clowdapp, starting kafka consumption, and
+    ensuring that `example_table` exists in the database.
+    """
     assert LoadedConfig is not None
 
     scaffolding.print_all_info()
 
     print(f"\n\n🚀\tStarter App started at: {datetime.now()}\n")
-    # We need to have a thread for consume_messages() to run in the background
-    CONSUMER_THREAD = threading.Thread(target=consume_messages)
-    CONSUMER_THREAD.start()
-    print("Started consumer thread")
-    postgres_conn = scaffolding.database_conn(autocommit=True)
-    print("Connected to Postgres")
-    SQL = "CREATE TABLE IF NOT EXISTS example_table (id SERIAL PRIMARY KEY, message VARCHAR(255));"
-    with postgres_conn.cursor() as cursor:
-        cursor.execute(SQL)
-    print("Created example_table")
+    if scaffolding.kafka_enabled:
+        # We need a thread for consume_messages() to run in the background
+        CONSUMER_THREAD = threading.Thread(target=consume_messages)
+        CONSUMER_THREAD.start()
+    if scaffolding.database_enabled:
+        postgres_conn = scaffolding.database_conn(autocommit=True)
+        SQL = ("CREATE TABLE IF NOT EXISTS example_table " +
+               "(id SERIAL PRIMARY KEY, message VARCHAR(255));")
+        with postgres_conn.cursor() as cursor:
+            cursor.execute(SQL)
+
     scaffolding.start_prometheus()
-    print("Started prometheus")
 
 
-# 0. dummy API for liveness and readiness probes ✅ (apparently clowder built-in)
-# 1. Get simple API to send/receive messages through kafka ✅
-#  - At some point, I need to convert from Flask to Django
-# 2. get examples for each clowder provider:
-#        Web - Finished ✅
-#        Minio - Finished ✅
-#        In-memory db - Finished ✅
-#        Kafka - Finished ✅
-#        Postgres - Finished ✅
-#        Metrics - Finished ✅
-#        InitContainer - Finished ✅
-#        Feature Flags - Finished ✅
-#        CronJob
-#        CJI
-# 3. Eventually be able to `oc process`/`oc apply` the starter app
-
+# Eventually be able to `oc process`/`oc apply` the starter app
 # Build stuff
 # Push to quay
-
-# oc get service
-# oc port-forward svc/starterapp-worker-service 8000
-# oc port-forward svc/env-boot-minio 9000
