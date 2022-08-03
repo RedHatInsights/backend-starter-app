@@ -6,6 +6,7 @@ from app_common_python import LoadedConfig, isClowderEnabled
 from confluent_kafka import Consumer, Producer
 from minio import Minio
 from prometheus_client import start_http_server
+from requests.exceptions import InvalidSchema
 from typing import Optional
 from UnleashClient import UnleashClient
 
@@ -320,10 +321,14 @@ class StarterHelper:
             method is called.
         """
         try:
+            # Set the autocommit state if it was specified
             if autocommit is not None:
                 self._database_connection.autocommit = autocommit
+            # Attempt to return cached connection
             return self._database_connection
+        # If cached connection is not available, create a new one
         except AttributeError as e:
+            # But only if the database is enabled
             if self.database_enabled:
                 self._database_connection = psycopg2.connect(
                     host=self.db_hostname,
@@ -331,6 +336,7 @@ class StarterHelper:
                     database=self.db_name,
                     user=self.db_username,
                     password=self.db_password)
+                # On connection creation, set the autocommit state if specified
                 if autocommit is not None:
                     self._database_connection.autocommit = autocommit
                 return self._database_connection
@@ -362,10 +368,14 @@ class StarterHelper:
             method is called.
         """
         try:
+            # Set the autocommit state if it was specified
             if autocommit is not None:
                 self._admin_database_connection.autocommit = autocommit
+            # Attempt to return cached connection
             return self._admin_database_connection
+        # If cached connection is not available, create a new one
         except AttributeError as e:
+            # But only if the database is enabled
             if self.database_enabled:
                 self._admin_database_connection = psycopg2.connect(
                     host=self.db_hostname,
@@ -373,6 +383,7 @@ class StarterHelper:
                     database=self.db_name,
                     user=self.db_admin_username,
                     password=self.db_admin_password)
+                # On connection creation, set the autocommit state if specified
                 if autocommit is not None:
                     self._admin_database_connection.autocommit = autocommit
                 return self._admin_database_connection
@@ -395,8 +406,11 @@ class StarterHelper:
             method is called.
         """
         try:
+            # Attempt to return cached connection
             return self._minio_conn
+        # If cached connection is not available, create a new one
         except AttributeError as e:
+            # But only if the object store is enabled
             if self.object_store_enabled:
                 self._minio_conn = Minio(
                     self.object_store_server,
@@ -423,8 +437,11 @@ class StarterHelper:
             called.
         """
         try:
+            # Attempt to return cached consumer
             return self._kafka_consumer_conn
+        # If cached consumer is not available, create a new one
         except AttributeError as e:
+            # But only if Kafka is enabled
             if self.kafka_enabled:
                 self._kafka_consumer_conn = Consumer({
                     "bootstrap.servers": self.kafka_server,
@@ -450,8 +467,11 @@ class StarterHelper:
             called.
         """
         try:
+            # Attempt to return cached producer
             return self._kafka_producer_conn
+        # If cached producer is not available, create a new one
         except AttributeError as e:
+            # But only if Kafka is enabled
             if self.kafka_enabled:
                 self._kafka_producer_conn = Producer({
                     "bootstrap.servers": self.kafka_server,
@@ -477,8 +497,11 @@ class StarterHelper:
             this method is called.
         """
         try:
+            # Attempt to return cached connection
             return self._redis_conn
+        # If cached connection is not available, create a new one
         except AttributeError as e:
+            # But only if the in-memory database is enabled
             if self.in_memory_db_enabled:
                 self._redis_conn = Redis(host=self.in_memory_db_host,
                                          port=self.in_memory_db_port)
@@ -501,34 +524,26 @@ class StarterHelper:
             If the feature flags server is not enabled in the Clowder config
             but this method is called.
         """
-        print("Getting feature flags connection")
         try:
-            print("Trying to return cached connection")
+            # Attempt to return cached connection
             return self._feature_flags_conn
+        # If cached connection is not available, create a new one
         except AttributeError as e:
-            print("Cached connection doesn't exist, creating new connection")
+            # But only if feature flags is enabled
             if self.feature_flags_enabled:
-                print("Feature flags is enabled")
-                if self.feature_flags_client_access_token is not None:
-                    print("\n\n  Using feature flags client access token:")
-                    print(f"    {self.feature_flags_client_access_token}\n\n")
                 # Unleash client takes custom_headers as dict | None, so we
                 # can directly pass client access token I believe
-                print("Creating feature flags client")
                 self._feature_flags_conn = UnleashClient(
                     url=self.feature_flags_url,
                     app_name=self.app_name,
                     custom_headers=self.feature_flags_client_access_token)
-                print("Client created")
-                print(f"conn: {self._feature_flags_conn}")
+                # Feature flags connections require initialization, and if
+                # they fail, we should raise an error and also delete the
+                # connection that we just created
                 try:
-                    # ? Why does initialize_client() fail?
                     self._feature_flags_conn.initialize_client()
-                except Exception:
-                    print("Invalid schema")
+                except InvalidSchema:
                     del self._feature_flags_conn
                     raise ProviderError("Invalid featureflags schema") from e
-                print("Client initialized")
                 return self._feature_flags_conn
-            print("self.feature_flags_enabled is not True")
             raise ProviderError("Feature flags server is not enabled") from e
