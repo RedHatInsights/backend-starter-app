@@ -20,7 +20,7 @@ Examples currently in the repository include:
 * Feature Flags, with the [Unleash Client library](https://github.com/Unleash/unleash-client-python), at the `/featureflag` endpoint.
     * Feature Flags can be set by forwarding the feature flags port, which defaults to 4242:
         ```sh
-        oc port-forward --namespace=boot svc/env-boot-featureflags 4242
+        oc port-forward --namespace=boot svc/env-boot-featureflags 4242;
         ```
         and then going to http://127.0.0.1:4242/.
 * A ClowdJobInvocation (CJI) found within the `clowdapp.yaml` file under the first `object` in the template, then under `spec: jobs: name: example-cji`.
