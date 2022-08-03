@@ -1,2 +1,2 @@
 # backend-starter-app
-The backend starter app repository 
+The backend starter app repository
