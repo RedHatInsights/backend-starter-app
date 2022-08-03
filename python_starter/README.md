@@ -1,6 +1,3 @@
----
-layout: post
----
 # Python Backend Starter App
 
 Provides small examples of various [Clowder](https://github.com/RedHatInsights/clowder/) providers by making use of [app-common-python](https://github.com/RedHatInsights/app-common-python) and some other small example pieces of code to attempt to help app developers get started more quickly.
