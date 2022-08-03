@@ -20,14 +20,14 @@ from . import views
 
 urlpatterns = [
     path('admin', admin.site.urls),
-    path('healthz', views.health),
-    path('livez', views.liveness),
-    path('readyz', views.readiness),
+    path('healthz', views.healthz),
+    path('livez', views.livez),
+    path('readyz', views.readyz),
     path('kafka', views.handle_kafka),
     path('minio', views.handle_minio),
     path('redis', views.handle_redis),
     path('postgres', views.handle_postgres),
-    path('postgres_init', views.postgres_init_get),
-    path('featureflag', views.feature_flag_get),
+    path('postgres_init', views.handle_postgres_init),
+    path('featureflag', views.handle_feature_flag),
 ]
 views.start_app()

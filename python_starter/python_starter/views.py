@@ -16,6 +16,8 @@ UNSEEN_MESSAGES = Gauge("unseen_messages", "Number of unseen messages")
 CONSUMED_MESSAGES = Counter("consumed_messages", "Number of consumed messages")
 PRODUCED_MESSAGES = Counter("produced_messages", "Number of produced messages")
 HEALTH_CALLS = Counter("health_calls", "Number of health calls")
+READINESS_CALLS = Counter("readiness_calls", "Number of readiness calls")
+LIVENESS_CALLS = Counter("liveness_calls", "Number of liveness calls")
 
 MESSAGES = {}
 
@@ -494,7 +496,9 @@ def handle_feature_flag(request: HttpRequest) -> HttpResponse:
 @csrf_exempt
 def healthz(request: HttpRequest) -> HttpResponse:
     """
-    Handles requests to the /healthz endpoint.
+    Handles requests to the /healthz endpoint. /healthz is called by clowder
+    when the readiness and liveness probes are not explicitly defined in the
+    clowdapp.yaml file.
 
     Parameters
     ----------
@@ -507,11 +511,11 @@ def healthz(request: HttpRequest) -> HttpResponse:
         The response object. Handled by Django.
     """
     HEALTH_CALLS.inc()
-    return HttpResponse("In health()")
+    return HttpResponse("/healthz returning ok")
 
 
 @csrf_exempt
-def liveness(request: HttpRequest) -> HttpResponse:
+def livez(request: HttpRequest) -> HttpResponse:
     """
     Handles requests to the /livez endpoint.
 
@@ -525,11 +529,12 @@ def liveness(request: HttpRequest) -> HttpResponse:
     HttpResponse
         The response object. Handled by Django.
     """
-    return HttpResponse("In liveness()")
+    LIVENESS_CALLS.inc()
+    return HttpResponse("/livez returning ok")
 
 
 @csrf_exempt
-def readiness(request: HttpRequest) -> HttpResponse:
+def readyz(request: HttpRequest) -> HttpResponse:
     """
     Handles requests to the /readyz endpoint.
 
@@ -543,7 +548,8 @@ def readiness(request: HttpRequest) -> HttpResponse:
     HttpResponse
         The response object. Handled by Django.
     """
-    return HttpResponse("In readiness()")
+    READINESS_CALLS.inc()
+    return HttpResponse("/readyz returning ok")
 
 
 def start_app() -> None:
