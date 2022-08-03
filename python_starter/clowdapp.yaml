@@ -30,7 +30,7 @@ objects:
         # Can verify that this runs with something like:
         # minikube kubectl -- config set-context --current --namespace=boot;
         # oc get pods | grep starterapp-example-cron | awk '{print $1}' | while read a; do oc logs $a; done;
-        - name: example-cron
+        - name: example-cronjob
           schedule: "*/1 * * * *"
           suspend: false
           successfulJobsHistoryLimit: 2
