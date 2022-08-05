@@ -2,6 +2,9 @@
     "publicPort": 8000,
     "metricsPort": 9000,
     "metricsPath": "/metrics",
+    "metadata": {
+        "name": "test-file"
+    },
     "logging": {
         "type": "cloudwatch",
         "cloudwatch": {
