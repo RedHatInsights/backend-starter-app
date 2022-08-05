@@ -40,7 +40,9 @@ class StarterHelper:
         if LoadedConfig is None:
             raise ValueError("LoadedConfig is None, impossible to continue")
         if LoadedConfig.metadata is None:
-            raise ValueError("Metadata does not exist for specifying a name")
+            raise ValueError(
+                "Please check that the Clowder config file contains a section "
+                "for metadata and that a name is specified within the metadata")
 
         self.app_name = LoadedConfig.metadata.name
         self._init_db()
@@ -330,6 +332,8 @@ class StarterHelper:
         except AttributeError as e:
             # But only if the database is enabled
             if self.database_enabled:
+                if self.db_use_rds:
+                    pass
                 self._database_connection = psycopg2.connect(
                     host=self.db_hostname,
                     port=self.db_port,
