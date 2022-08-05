@@ -1,8 +1,7 @@
 .DEFAULT_GOAL := quick_build
 
-PERSONAL_SECRET ?= ../../../rh-ee-jtoftum-secret.yml
+# TODO: Fix personal stuff
 QUAY_SECRET ?= ../../../quay-cloudservices-pull.yml
-# IMAGE_TAG ?= $(shell git rev-parse --short=7 HEAD)
 IMAGE_TAG := $(shell cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 7 | head -n 1)
 HOST ?= 127.0.0.1
 LOCATION ?= :5000/starterapp
@@ -29,6 +28,7 @@ minikube_start:
 	@echo "Curling clowder prereqs"
 	curl https://raw.githubusercontent.com/RedHatInsights/clowder/master/build/kube_setup.sh | bash
 	@echo "Applying clowder"
+	# TODO: Get latest clowder version from github automagically
 	minikube kubectl -- apply -f https://github.com/RedHatInsights/clowder/releases/download/v0.42.0/clowder-manifest-v0.42.0.yaml --validate=false
 
 
@@ -46,7 +46,6 @@ push_pod:
 
 namespace_prep:
 	oc create namespace boot --dry-run=client -o yaml | oc apply -f -
-	# oc apply -f $(PERSONAL_SECRET) --namespace=boot
 	oc apply -f $(QUAY_SECRET) --namespace=boot
 	bonfire deploy-env --namespace=boot
 
