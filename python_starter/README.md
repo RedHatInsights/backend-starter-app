@@ -69,7 +69,7 @@ Examples currently in the repository include:
 * A CronJob, found within the `clowdapp.yaml` file under the first `object` in the template, then under `spec: jobs: name: example-cronjob`
     * Once the app is running, this can be verified to have run with:
         ```sh
-        oc get pods --namespace=boot | grep starterapp-example-cron | awk '{print $1}' | while read a; do oc logs --namespace=boot $a; done
+        oc get pods --namespace=boot | grep starterapp-example-cronjob | awk '{print $1}' | while read a; do oc logs --namespace=boot $a; done
         ```
 ---
 ## Tests
