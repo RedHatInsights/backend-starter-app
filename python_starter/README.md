@@ -13,6 +13,7 @@ In order to run this you'll need to have the following installed:
 * The Kubernetes command-line tool, [Kubectl](https://kubernetes.io/docs/tasks/tools/)
 * [Python3](https://www.python.org/downloads/)—the starter app itself is using Python 3.9
 * [Bonfire](https://pypi.org/project/crc-bonfire/)
+* The json processor [jq](https://stedolan.github.io/jq/download/)
 * [Pytest](https://docs.pytest.org/en/latest/) if you want to run the tests
 
 ---
