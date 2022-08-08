@@ -21,9 +21,13 @@ LIVENESS_CALLS = Counter("liveness_calls", "Number of liveness calls")
 
 MESSAGES = {}
 
+# NOTE: https://docs.djangoproject.com/en/4.0/ref/csrf/
+# The approaches below (and in particular the `csrf_exempt` decorator) are not
+# necessarily safe to be used in a production environment
 
-# NOTE: this is intended to be used in production, a safer method should be used
-# than saving the messages directly to memory.
+
+# NOTE: this is not intended to be used in production--a safer method should be
+# used than saving the messages directly to memory.
 def consume_messages() -> None:
     """
     This function is intended to be run in a separate thread. It will consume
@@ -50,11 +54,6 @@ def consume_messages() -> None:
         MESSAGES = messages
         CONSUMED_MESSAGES.inc()
         print(f"  Consumed message: {msg.value()}")
-
-
-# NOTE: https://docs.djangoproject.com/en/4.0/ref/csrf/
-# The approaches below (and in particular the `csrf_exempt` decorator) are not
-# necessarily safe to be used in a production environment
 
 
 # complementary to the consume_messages() function

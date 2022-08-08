@@ -112,7 +112,6 @@ class StarterHelper:
         else:
             self.kafka_enabled = False
 
-
     def _init_minio(self):
         """
         Initializes object store. Called on initialization of the class.
