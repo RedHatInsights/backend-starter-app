@@ -5,10 +5,9 @@ from app_common_python import LoadedConfig, isClowderEnabled
 number_of_messages = 100
 environment = environ.Env()
 
-db_use_rds = False
-# TODO: Create connection using rdsCa
+db_sslmode = None
+db_sslrootcert = None
 if LoadedConfig.database.rdsCa:
-    db_use_rds = True
     db_sslmode = environment.get_value("PGSSLMODE", default="prefer")
     db_sslrootcert = LoadedConfig.rds_ca()
 
@@ -16,7 +15,9 @@ db_conn = psycopg2.connect(host=LoadedConfig.database.hostname,
                            port=LoadedConfig.database.port,
                            database=LoadedConfig.database.name,
                            user=LoadedConfig.database.username,
-                           password=LoadedConfig.database.password)
+                           password=LoadedConfig.database.password,
+                           sslmode=db_sslmode,
+                           sslrootcert=db_sslrootcert)
 
 db_conn.autocommit = True
 

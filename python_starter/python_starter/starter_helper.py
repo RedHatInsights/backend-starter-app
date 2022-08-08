@@ -65,10 +65,9 @@ class StarterHelper:
             return
 
         self.database_enabled = True
-        self.db_use_rds = False
-        # TODO: Create connection using rdsCa
+        self.db_sslmode = None
+        self.db_sslrootcert = None
         if LoadedConfig.database.rdsCa:
-            self.db_use_rds = True
             self.db_sslmode = self.environment.get_value("PGSSLMODE",
                                                          default="prefer")
             self.db_sslrootcert = LoadedConfig.rds_ca()
@@ -109,13 +108,10 @@ class StarterHelper:
             self.kafka_host = kafka_broker.hostname
             self.kafka_port = kafka_broker.port
             self.kafka_enabled = True
+            self.kafka_server = f"{self.kafka_host}:{self.kafka_port}"
         else:
-            # ? Should this ever be called if we're using Clowder or should we
-            # ? just say kafka is disabled?
             self.kafka_enabled = False
-            self.kafka_host = "localhost"
-            self.kafka_port = "9092"
-        self.kafka_server = f"{self.kafka_host}:{self.kafka_port}"
+
 
     def _init_minio(self):
         """
@@ -332,14 +328,14 @@ class StarterHelper:
         except AttributeError as e:
             # But only if the database is enabled
             if self.database_enabled:
-                if self.db_use_rds:
-                    pass
                 self._database_connection = psycopg2.connect(
                     host=self.db_hostname,
                     port=self.db_port,
                     database=self.db_name,
                     user=self.db_username,
-                    password=self.db_password)
+                    password=self.db_password,
+                    sslmode=self.db_sslmode,
+                    sslrootcert=self.db_sslrootcert)
                 # On connection creation, set the autocommit state if specified
                 if autocommit is not None:
                     self._database_connection.autocommit = autocommit
@@ -386,7 +382,9 @@ class StarterHelper:
                     port=self.db_port,
                     database=self.db_name,
                     user=self.db_admin_username,
-                    password=self.db_admin_password)
+                    password=self.db_admin_password,
+                    sslmode=self.db_sslmode,
+                    sslrootcert=self.db_sslrootcert)
                 # On connection creation, set the autocommit state if specified
                 if autocommit is not None:
                     self._admin_database_connection.autocommit = autocommit
@@ -537,7 +535,7 @@ class StarterHelper:
             if self.feature_flags_enabled:
                 # Unleash client takes custom_headers as dict | None, so we
                 # can directly pass client access token I believe
-                self._feature_flags_conn = UnleashClient(
+                feature_flags_connection = UnleashClient(
                     url=self.feature_flags_url,
                     app_name=self.app_name,
                     custom_headers=self.feature_flags_client_access_token)
@@ -545,9 +543,9 @@ class StarterHelper:
                 # they fail, we should raise an error and also delete the
                 # connection that we just created
                 try:
-                    self._feature_flags_conn.initialize_client()
+                    feature_flags_connection.initialize_client()
+                    self._feature_flags_conn = feature_flags_connection
+                    return self._feature_flags_conn
                 except InvalidSchema:
-                    del self._feature_flags_conn
                     raise ProviderError("Invalid featureflags schema") from e
-                return self._feature_flags_conn
             raise ProviderError("Feature flags server is not enabled") from e
