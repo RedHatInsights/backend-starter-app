@@ -1,14 +1,11 @@
 .DEFAULT_GOAL := quick_build
 
-# TODO: Fix personal stuff
+# Information about this is in the README.md file.
 QUAY_SECRET ?= ../../../quay-cloudservices-pull.yml
 IMAGE_TAG := $(shell cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 7 | head -n 1)
 HOST ?= 127.0.0.1
 LOCATION ?= :5000/starterapp
 IMAGE ?= $(HOST)$(LOCATION)
-
-# From a clean slate, `make all`
-# After that `make`
 
 all: minikube_start build
 	# Start minikube, build image, and push locally
@@ -28,8 +25,7 @@ minikube_start:
 	@echo "Curling clowder prereqs"
 	curl https://raw.githubusercontent.com/RedHatInsights/clowder/master/build/kube_setup.sh | bash
 	@echo "Applying clowder"
-	# TODO: Get latest clowder version from github automagically
-	minikube kubectl -- apply -f https://github.com/RedHatInsights/clowder/releases/download/v0.42.0/clowder-manifest-v0.42.0.yaml --validate=false
+	minikube kubectl -- apply -f $(curl https://api.github.com/repos/RedHatInsights/clowder/releases/latest | jq '.assets[0].browser_download_url' -r) --validate=false
 
 
 build_container:
