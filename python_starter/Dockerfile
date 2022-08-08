@@ -1,5 +1,5 @@
-# Use ubi8 image for our python distribution
-FROM registry.access.redhat.com/ubi8/python-38
+# Use ubi9 image for our python distribution
+FROM registry.access.redhat.com/ubi9/python-39
 
 # Install net-tools for netstat and ifconfig, which are useful for troubleshooting
 USER root

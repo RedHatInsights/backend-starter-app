@@ -11,7 +11,7 @@ In order to run this you'll need to have the following installed:
 * [Podman](https://podman.io/getting-started/installation.html)
 * [Minikube](https://minikube.sigs.k8s.io/docs/start/)
 * The Kubernetes command-line tool, [Kubectl](https://kubernetes.io/docs/tasks/tools/)
-* [Python3](https://www.python.org/downloads/)—the starter app itself is using Python 3.8
+* [Python3](https://www.python.org/downloads/)—the starter app itself is using Python 3.9
 * [Bonfire](https://pypi.org/project/crc-bonfire/)
 * [Pytest](https://docs.pytest.org/en/latest/) if you want to run the tests
 
