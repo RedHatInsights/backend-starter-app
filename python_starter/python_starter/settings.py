@@ -25,9 +25,9 @@ SECRET_KEY = 'django-insecure-820h7j52=z2q6uuaf^0ja*fo#i-#x35vkmj*$v)m!+%tcv728j
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-# TODO: Figure out why this doesn't work with
+# Since this is running in a container, instead of running on localhost as
 # `ALLOWED_HOSTS = ['localhost', '127.0.0.1']`
-# Or at least see if there's a better way to do it`
+# We will allow it to run on everything
 ALLOWED_HOSTS = ['*']
 
 
