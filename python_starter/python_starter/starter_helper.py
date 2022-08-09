@@ -53,7 +53,7 @@ class StarterHelper:
         self._init_metrics()
         self._init_feature_flags()
 
-    def _init_db(self):
+    def _init_db(self) -> None:
         """
         Initializes the database. Called on initialization of the class.
         """
@@ -79,7 +79,7 @@ class StarterHelper:
         self.db_admin_username = LoadedConfig.database.adminUsername
         self.db_admin_password = LoadedConfig.database.adminPassword
 
-    def _init_in_memory_db(self):
+    def _init_in_memory_db(self) -> None:
         """
         Initializes the in-memory database. Called on initialization of the
         class.
@@ -98,7 +98,7 @@ class StarterHelper:
             port = self.in_memory_db_port = LoadedConfig.inMemoryDb.port
         self.default_redis_url = f"redis://{host}:{port}/0"
 
-    def _init_kafka(self):
+    def _init_kafka(self) -> None:
         """
         Initializes kafka. Called on initialization of the class.
         """
@@ -112,7 +112,7 @@ class StarterHelper:
         else:
             self.kafka_enabled = False
 
-    def _init_minio(self):
+    def _init_minio(self) -> None:
         """
         Initializes object store. Called on initialization of the class.
         """
@@ -129,7 +129,7 @@ class StarterHelper:
             self.object_store_secret_key = LoadedConfig.objectStore.secretKey
             self.object_store_server = f"{host}:{port}"
 
-    def _init_metrics(self):
+    def _init_metrics(self) -> None:
         """
         Initializes metrics. Called on initialization of the class.
         """
@@ -137,7 +137,7 @@ class StarterHelper:
         self.prometheus_started = False
         self.metrics_port = LoadedConfig.metricsPort
 
-    def _init_cloudwatch(self):
+    def _init_cloudwatch(self) -> None:
         """
         Initializes cloudwatch. Called on initialization of the class.
         """
@@ -169,7 +169,7 @@ class StarterHelper:
         self.cw_create_log_group = self.environment.bool("CW_CREATE_LOG_GROUP",
                                                          default=False)
 
-    def _init_feature_flags(self):
+    def _init_feature_flags(self) -> None:
         """
         Initializes feature flags. Called on initialization of the class.
         """
@@ -186,7 +186,7 @@ class StarterHelper:
         scheme = ff.scheme.valueAsString(ff.scheme)
         self.feature_flags_url = f"{scheme}://{ff.hostname}:{ff.port}/api"
 
-    def print_all_info(self):
+    def print_all_info(self) -> None:
         """
         Prints the information about various providers, such as whether they
         are enabled. Providers include PostgreSQL, Kafka, Minio, CloudWatch,
@@ -205,7 +205,7 @@ class StarterHelper:
         self.print_object_store_info()
         print("\n🐷\tThat's all, folks!")
 
-    def print_kafka_info(self):
+    def print_kafka_info(self) -> None:
         """
         Prints out the kafka info
         """
@@ -215,7 +215,7 @@ class StarterHelper:
         else:
             print(f"\t▪ Kafka Server: {self.kafka_server}")
 
-    def print_cloudwatch_info(self):
+    def print_cloudwatch_info(self) -> None:
         """
         Prints info about cloudwatch logging.
         """
