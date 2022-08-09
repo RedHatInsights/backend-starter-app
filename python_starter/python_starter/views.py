@@ -61,7 +61,7 @@ def kafka_get(request: HttpRequest) -> HttpResponse:
     """
     Handles GET requests to the /kafka endpoint. Returns the messages from the
     Kafka topic as specified in the clowdapp config.
-    Example url: http://127.0.0.1:8000/kafka?message=hello
+    Example url: http://127.0.0.1:8000/kafka
 
     Parameters
     ----------
