@@ -25,7 +25,7 @@ minikube_start:
 	@echo "Curling clowder prereqs"
 	curl https://raw.githubusercontent.com/RedHatInsights/clowder/master/build/kube_setup.sh | bash
 	@echo "Applying clowder"
-	minikube kubectl -- apply -f $(curl https://api.github.com/repos/RedHatInsights/clowder/releases/latest | jq '.assets[0].browser_download_url' -r) --validate=false
+	minikube kubectl -- apply --validate=false -f $(curl https://api.github.com/repos/RedHatInsights/clowder/releases/latest | jq '.assets[0].browser_download_url' -r)
 
 
 build_container:
