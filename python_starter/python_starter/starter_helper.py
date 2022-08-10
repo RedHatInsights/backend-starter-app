@@ -509,7 +509,7 @@ class StarterHelper:
                 return self._redis_conn
             raise ProviderError("In-memory db is not enabled") from e
 
-    def feature_flags_conn(self) -> UnleashClient:
+    def feature_flags_conn(self, *args, **kwargs) -> UnleashClient:
         """
         Returns a connection to the feature flags server specified by the
         Clowder config.
@@ -537,7 +537,9 @@ class StarterHelper:
                 feature_flags_connection = UnleashClient(
                     url=self.feature_flags_url,
                     app_name=self.app_name,
-                    custom_headers=self.feature_flags_client_access_token)
+                    custom_headers=self.feature_flags_client_access_token,
+                    *args,
+                    **kwargs)
                 # Feature flags connections require initialization, and if
                 # they fail, we should raise an error and also delete the
                 # connection that we just created

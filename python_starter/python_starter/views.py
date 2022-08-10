@@ -460,7 +460,7 @@ def feature_flag_get(request: HttpRequest) -> HttpResponse:
     flag = query_dict.get("flag", None)
     if flag is None:
         return HttpResponse("No flag specified", status=400)
-    connection = scaffolding.feature_flags_conn()
+    connection = scaffolding.feature_flags_conn(refresh_interval=1)
     result = connection.is_enabled(flag)
     if result is None:
         return HttpResponse("Flag not found in database", status=404)
