@@ -61,17 +61,24 @@ Examples currently in the repository include:
         oc port-forward --namespace=boot svc/env-boot-featureflags 4242
         ```
         and then going to http://127.0.0.1:4242/.
+    * It may be worth noting that the Unleash client, by default, refreshes its feature flags every 15 seconds. If this is deemed to be too slow, the connection can be initialized with a smaller refresh interval, e.g.
+        ```python
+        scaffolding.feature_flags_conn(refresh_interval=1)
+        ```
+        See the [Unleash docs](https://docs.getunleash.io/unleash-client-python/unleashclient.html) for more information.
 * A ClowdJobInvocation (CJI) found within the `clowdapp.yaml` file under the first `object` in the template, then under `spec: jobs: name: example-cji`.
     * The CJI is triggered as a job by the *second* `object` in the template, then under `spec: jobs: example-cji`
-    * Once the app is running, this can be verified to be running on a schedule with:
+    * Once the app is running, this can be verified to have run with:
         ```sh
         oc get pods --namespace=boot | grep starterapp-example-cji | awk '{print $1}' | while read a; do oc logs --namespace=boot $a; done
         ```
 * A CronJob, found within the `clowdapp.yaml` file under the first `object` in the template, then under `spec: jobs: name: example-cronjob`
-    * Once the app is running, this can be verified to have run with:
+    * Once the app is running, this can be verified to be running on a schedule with:
         ```sh
         oc get pods --namespace=boot | grep starterapp-example-cronjob | awk '{print $1}' | while read a; do oc logs --namespace=boot $a; done
         ```
+All provider connections pass any additional arguments and keyword arguments to the relevant initialization functions.
+
 ---
 ## Tests
 Some unit tests are included to ensure that the app works as expected, and can be run using `pytest` after forwarding the web port. For example
