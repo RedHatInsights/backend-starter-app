@@ -53,6 +53,8 @@ class StarterHelper:
         self._init_metrics()
         self._init_feature_flags()
 
+# region init helpers
+
     def _init_db(self) -> None:
         """
         Initializes the database. Called on initialization of the class.
@@ -185,6 +187,9 @@ class StarterHelper:
         # LoadedConfig.featureFlags.scheme is an Enum
         scheme = ff.scheme.valueAsString(ff.scheme)
         self.feature_flags_url = f"{scheme}://{ff.hostname}:{ff.port}/api"
+# endregion
+
+# region print info
 
     def print_all_info(self) -> None:
         """
@@ -282,6 +287,9 @@ class StarterHelper:
             print(f'\t▪ Object store tls: {self.object_store_tls}')
         else:
             print("\t🚫 LoadedConfig.objectStore is None")
+# endregion
+
+# region starters and connections
 
     def start_prometheus(self) -> None:
         """
@@ -294,7 +302,10 @@ class StarterHelper:
             start_http_server(port=int(LoadedConfig.metricsPort))
             self.prometheus_started = True
 
-    def database_conn(self, autocommit: Optional[bool] = None) -> connection:
+    def database_conn(self,
+                      autocommit: Optional[bool] = None,
+                      *args,
+                      **kwargs) -> connection:
         """
         Returns a connection to the database specified by the Clowder config.
 
@@ -334,7 +345,9 @@ class StarterHelper:
                     user=self.db_username,
                     password=self.db_password,
                     sslmode=self.db_sslmode,
-                    sslrootcert=self.db_sslrootcert)
+                    sslrootcert=self.db_sslrootcert,
+                    *args,
+                    **kwargs)
                 # On connection creation, set the autocommit state if specified
                 if autocommit is not None:
                     self._database_connection.autocommit = autocommit
@@ -342,7 +355,9 @@ class StarterHelper:
             raise ProviderError("Database is not enabled") from e
 
     def admin_database_conn(self,
-                            autocommit: Optional[bool] = None) -> connection:
+                            autocommit: Optional[bool] = None,
+                            *args,
+                            **kwargs) -> connection:
         """
         Returns an admin connection to the database specified by the Clowder
         config.
@@ -383,14 +398,16 @@ class StarterHelper:
                     user=self.db_admin_username,
                     password=self.db_admin_password,
                     sslmode=self.db_sslmode,
-                    sslrootcert=self.db_sslrootcert)
+                    sslrootcert=self.db_sslrootcert,
+                    *args,
+                    **kwargs)
                 # On connection creation, set the autocommit state if specified
                 if autocommit is not None:
                     self._admin_database_connection.autocommit = autocommit
                 return self._admin_database_connection
             raise ProviderError("Database is not enabled") from e
 
-    def object_store_conn(self) -> Minio:
+    def object_store_conn(self, *args, **kwargs) -> Minio:
         """
         Returns a connection to the object store specified by the Clowder
         config.
@@ -417,11 +434,13 @@ class StarterHelper:
                     self.object_store_server,
                     access_key=self.object_store_access_key,
                     secret_key=self.object_store_secret_key,
-                    secure=False)
+                    secure=False,
+                    *args,
+                    **kwargs)
                 return self._minio_conn
             raise ProviderError("Object store is not enabled") from e
 
-    def kafka_consumer(self) -> Consumer:
+    def kafka_consumer(self, *args, **kwargs) -> Consumer:
         """
         Returns a Kafka consumer that can be used to consume messages from the
         Kafka server specified by the Clowder config.
@@ -444,14 +463,15 @@ class StarterHelper:
         except AttributeError as e:
             # But only if Kafka is enabled
             if self.kafka_enabled:
-                self._kafka_consumer_conn = Consumer({
-                    "bootstrap.servers": self.kafka_server,
-                    "group.id": __name__
-                })
+                self._kafka_consumer_conn = Consumer(
+                    {
+                        "bootstrap.servers": self.kafka_server,
+                        "group.id": __name__
+                    }, *args, **kwargs)
                 return self._kafka_consumer_conn
             raise ProviderError("Kafka is not enabled") from e
 
-    def kafka_producer(self) -> Producer:
+    def kafka_producer(self, *args, **kwargs) -> Producer:
         """
         Returns a Kafka producer that can be used to produce messages to the
         Kafka server specified by the Clowder config.
@@ -474,14 +494,15 @@ class StarterHelper:
         except AttributeError as e:
             # But only if Kafka is enabled
             if self.kafka_enabled:
-                self._kafka_producer_conn = Producer({
-                    "bootstrap.servers": self.kafka_server,
-                    "client.id": __name__
-                })
+                self._kafka_producer_conn = Producer(
+                    {
+                        "bootstrap.servers": self.kafka_server,
+                        "client.id": __name__
+                    }, *args, **kwargs)
                 return self._kafka_producer_conn
             raise ProviderError("Kafka is not enabled") from e
 
-    def in_memory_db_conn(self) -> Redis:
+    def in_memory_db_conn(self, *args, **kwargs) -> Redis:
         """
         Returns a connection to the in-memory databas`e specified by the Clowder
         config.
@@ -505,7 +526,9 @@ class StarterHelper:
             # But only if the in-memory database is enabled
             if self.in_memory_db_enabled:
                 self._redis_conn = Redis(host=self.in_memory_db_host,
-                                         port=self.in_memory_db_port)
+                                         port=self.in_memory_db_port,
+                                         *args,
+                                         **kwargs)
                 return self._redis_conn
             raise ProviderError("In-memory db is not enabled") from e
 
@@ -550,3 +573,6 @@ class StarterHelper:
                 except InvalidSchema:
                     raise ProviderError("Invalid featureflags schema") from e
             raise ProviderError("Feature flags server is not enabled") from e
+
+
+# endregion
