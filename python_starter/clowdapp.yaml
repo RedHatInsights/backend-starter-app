@@ -1,0 +1,99 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: starterapptemplate
+parameters:
+  - name: IMAGE_TAG
+  - name: IMAGE
+objects:
+  - apiVersion: cloud.redhat.com/v1alpha1
+    kind: ClowdApp
+    metadata:
+      name: starterapp
+    spec:
+      envName: env-boot
+      # ClowdJobInvocations and CronJobs
+      jobs:
+        # Can verify that this runs with something like:
+        # minikube kubectl -- config set-context --current --namespace=boot;
+        # oc get pods | grep starterapp-example-cji | awk '{print $1}' | while read a; do oc logs $a; done;
+        - name: example-cji
+          suspend: false
+          activeDeadlineSeconds: 6000
+          successfulJobsHistoryLimit: 1
+          podSpec:
+            image: busybox
+            args:
+              - /bin/sh
+              - -c
+              - echo "ClowdJobInvocation works, hello there!"
+        # Can verify that this runs with something like:
+        # minikube kubectl -- config set-context --current --namespace=boot;
+        # oc get pods | grep starterapp-example-cron | awk '{print $1}' | while read a; do oc logs $a; done;
+        - name: example-cronjob
+          schedule: "*/1 * * * *"
+          suspend: false
+          successfulJobsHistoryLimit: 2
+          failedJobsHistoryLimit: 2
+          activeDeadlineSeconds: 6000
+          podSpec:
+            image: busybox
+            args:
+              - /bin/sh
+              - -c
+              - echo "CronJob running at $(date +"%T")"
+            machinePool: memory
+      kafkaTopics:
+        - topicName: example-topic
+          partitions: 1
+          replicas: 1
+      database:
+        name: exampleDatabase
+      inMemoryDb: true
+      objectStore:
+        - name
+      deployments:
+        - name: worker-service
+          minReplicas: 1
+          podSpec:
+            # Defined in docker file
+            image: ${IMAGE}:${IMAGE_TAG}
+            initContainers:
+              - name: example-init-container
+                inheritEnv: true
+                command:
+                  - python
+                  - /python_starter/init_container_db_setup.py
+            livenessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /livez
+                # Use the same port as web services
+                port: web
+                scheme: HTTP
+              periodSeconds: 30
+              successThreshold: 1
+              timeoutSeconds: 60
+            readinessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /readyz
+                port: web
+                scheme: HTTP
+              periodSeconds: 30
+              successThreshold: 1
+              timeoutSeconds: 60
+          webServices:
+            public:
+              enabled: true
+            metrics:
+              enabled: true
+
+  - apiVersion: cloud.redhat.com/v1alpha1
+    kind: ClowdJobInvocation
+    metadata:
+      name: runner
+    spec:
+      appName: starterapp
+      jobs:
+        - example-cji

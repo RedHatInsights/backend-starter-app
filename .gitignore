@@ -1,0 +1,5 @@
+.pytest_cache
+.vscode
+.venv
+__pycache__
+python_starter/build
